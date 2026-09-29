@@ -1,0 +1,24 @@
+# Ambiente
+.venv/
+__pycache__/
+*.pyc
+
+# Segredos
+.env
+.env.*
+!.env.example
+
+# Dados locais do agente
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+
+# Build
+dist/
+build/
+*.spec

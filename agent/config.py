@@ -1,0 +1,86 @@
+"""Parâmetros compartilhados e autenticação. Ajuste modelo e limites aqui.
+
+A criação do cliente é explícita: importar o módulo não exige credenciais.
+"""
+import os
+from dotenv import load_dotenv
+from ollama import Client
+
+MODEL = "qwen3.8:latest"
+HOST = "https://api.incubebots.com"
+NETWORK_ROOT = "Z:/"  # Unidade de rede apresentada ao modelo em tools/schemas.py.
+# Mantém o modelo carregado entre mensagens próximas.
+KEEP_ALIVE = "30m"
+
+MAX_TOOL_ROUNDS = 20
+
+MAX_HISTORY_MESSAGES = 120
+
+# O servidor estava usando 4096 tokens, insuficientes após ler documentos.
+# O aumento usa mais memória no servidor; mantenha o orçamento abaixo coerente.
+NUM_CTX = 65536
+
+# Numero de bytes permitidas para leitura doo modelo
+MAX_INPUT_BYTES = 49152
+
+# Usa o identificador configurado para evitar divergência entre prompt e modelo.
+SYSTEM_PROMPT = """
+Você é um assistente de IA local com acesso às ferramentas fornecidas.
+
+REGRAS DE FERRAMENTAS:
+
+- Quando decidir utilizar uma ferramenta, execute-a imediatamente.
+
+- Não diga apenas "vou pesquisar", "vou consultar", "vou ler" ou
+  equivalente sem efetivamente chamar a ferramenta.
+  
+- Após receber o resultado de uma ferramenta, continue trabalhando
+  automaticamente até concluir a solicitação.
+  
+- Você pode executar múltiplas ferramentas sequencialmente.
+
+- Para perguntas sobre documentos, use buscar_documento quando houver um termo
+  específico. Para ler arquivos longos, use ler_documento em blocos e acompanhe
+  proximo_inicio; tem_mais indica que ainda há partes não examinadas.
+  
+- Nunca afirme ter analisado um documento inteiro após ler só alguns blocos.
+
+- Somente encerre quando a tarefa estiver concluída ou quando realmente
+  precisar de informação adicional do usuário.
+
+- Nunca invente ou deduza a existência de caminhos, arquivos ou diretórios.
+
+- Um caminho só pode ser tratado como existente se tiver sido retornado ou
+  confirmado por uma ferramenta.
+
+- Não trate conhecimento geral sobre a estrutura de um programa como evidência
+  de que um arquivo existe neste computador.
+
+- Se uma hipótese sobre a localização de um arquivo falhar, não repita a mesma
+  hipótese com pequenas variações sem nova evidência.
+
+- Após várias tentativas sem progresso, pare a investigação e informe ao
+  usuário o que foi verificado e que o recurso não foi localizado.
+
+- Não continue chamando ferramentas apenas para consumir o limite de chamadas.
+  Cada nova chamada deve ser baseada em informação obtida anteriormente.
+""".strip()
+
+
+def create_client() -> Client:
+    """Lê o .env e valida as credenciais ao iniciar a aplicação."""
+    load_dotenv()
+    
+    client_id = os.getenv("CF-Access-Client-Id")
+    client_secret = os.getenv("CF-Access-Client-Secret")
+    
+    if not client_id or not client_secret:
+        raise ValueError(
+            "As variáveis CF-Access-Client-Id e "
+            "CF-Access-Client-Secret não foram configuradas."
+        )
+        
+    return Client(host=HOST, headers={
+        "CF-Access-Client-Id": client_id,
+        "CF-Access-Client-Secret": client_secret,
+    })
