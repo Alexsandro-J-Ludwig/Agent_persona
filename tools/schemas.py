@@ -9,12 +9,12 @@ tools = [
                 "properties": {
                     "matricula": {
                         "type": "string",
-                        "description": "Matricula a ser consultada"
+                        "description": "Matricula a ser consultada",
                     }
                 },
-                "required": ["matricula"]
-            }
-        }
+                "required": ["matricula"],
+            },
+        },
     },
     {
         "type": "function",
@@ -35,20 +35,20 @@ tools = [
                 posteriores sobre os resultados.
                 """,
             "parameters": {
-                "type":"object",
+                "type": "object",
                 "properties": {
                     "DatIni": {
                         "type": "string",
-                        "description": "Periodo inicial da consulta"
+                        "description": "Periodo inicial da consulta",
                     },
                     "DatFim": {
                         "type": "string",
-                        "description": "Periodo final da consulta"
-                    }
+                        "description": "Periodo final da consulta",
+                    },
                 },
-                "required": ["DatIni", "DatFim"]
-            }
-        }
+                "required": ["DatIni", "DatFim"],
+            },
+        },
     },
     {
         "type": "function",
@@ -69,7 +69,7 @@ tools = [
                 "properties": {
                     "termo": {
                         "type": "string",
-                        "description": "Nome completo ou palavras do nome do arquivo"
+                        "description": "Nome completo ou palavras do nome do arquivo",
                     },
                     "diretorio": {
                         "type": "string",
@@ -84,19 +84,18 @@ tools = [
                             Use Z:/ somente quando houver motivo para acreditar que o arquivo
                             está na rede. Quando conhecer uma subpasta mais específica,
                             prefira-a em vez de pesquisar toda a unidade.
-                        """
-                    }
+                        """,
+                    },
                 },
-                "required": ["termo"]
-            }
-        }
-            
+                "required": ["termo"],
+            },
+        },
     },
     {
-    "type": "function",
-    "function": {
-        "name": "ler_documento",
-        "description": """
+        "type": "function",
+        "function": {
+            "name": "ler_documento",
+            "description": """
             Lê um trecho pequeno de um documento localizado no computador.
             Use esta função quando o caminho do arquivo já for conhecido,
             normalmente após utilizar a função pesquisar_arquivo.
@@ -105,31 +104,31 @@ tools = [
             Se a pergunta for específica, prefira buscar_documento para localizar
             apenas os trechos relevantes. Não conclua sobre partes não lidas.
         """,
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "caminho": {
-                    "type": "string",
-                    "description": "Caminho completo do arquivo que será lido"
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "caminho": {
+                        "type": "string",
+                        "description": "Caminho completo do arquivo que será lido",
+                    },
+                    "inicio": {
+                        "type": "integer",
+                        "description": "Posição em caracteres retornada em proximo_inicio. Padrão: 0.",
+                    },
+                    "tamanho": {
+                        "type": "integer",
+                        "description": "Máximo de caracteres no trecho, de 1 a 4000. Padrão: 2500.",
+                    },
                 },
-                "inicio": {
-                    "type": "integer",
-                    "description": "Posição em caracteres retornada em proximo_inicio. Padrão: 0."
-                },
-                "tamanho": {
-                    "type": "integer",
-                    "description": "Máximo de caracteres no trecho, de 1 a 4000. Padrão: 2500."
-                }
+                "required": ["caminho"],
             },
-            "required": ["caminho"]
-        }
-    }
-},
+        },
+    },
     {
-    "type": "function",
-    "function": {
-        "name": "buscar_documento",
-        "description": """
+        "type": "function",
+        "function": {
+            "name": "buscar_documento",
+            "description": """
             Procura uma expressão dentro de PDF, DOCX, XLSX, XLSM, CSV,
             TXT, MD, JSON e py sem enviar o arquivo completo ao modelo.
             Retorna trechos e posições. Use quando a pergunta citar um assunto,
@@ -137,22 +136,31 @@ tools = [
             podem ser parciais. Para contexto adicional, chame ler_documento
             com o inicio de um trecho retornado.
         """,
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "caminho": {"type": "string", "description": "Caminho completo do documento"},
-                "termo": {"type": "string", "description": "Expressão textual a encontrar no conteúdo"},
-                "limite": {"type": "integer", "description": "Máximo de trechos, de 1 a 20. Padrão: 8."}
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "caminho": {
+                        "type": "string",
+                        "description": "Caminho completo do documento",
+                    },
+                    "termo": {
+                        "type": "string",
+                        "description": "Expressão textual a encontrar no conteúdo",
+                    },
+                    "limite": {
+                        "type": "integer",
+                        "description": "Máximo de trechos, de 1 a 20. Padrão: 8.",
+                    },
+                },
+                "required": ["caminho", "termo"],
             },
-            "required": ["caminho", "termo"]
-        }
-    }
-},
+        },
+    },
     {
-    "type": "function",
-    "function": {
-        "name": "listar_diretorio",
-        "description": """
+        "type": "function",
+        "function": {
+            "name": "listar_diretorio",
+            "description": """
             Lista os arquivos e subdiretórios existentes dentro de uma pasta
             do computador.
 
@@ -170,25 +178,25 @@ tools = [
             Para explorar uma subpasta encontrada, esta ferramenta pode ser
             chamada novamente utilizando o caminho da subpasta.
         """,
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "caminho": {
-                    "type": "string",
-                    "description": """
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "caminho": {
+                        "type": "string",
+                        "description": """
                         Caminho completo do diretório que será listado.
-                    """
-                }
+                    """,
+                    }
+                },
+                "required": ["caminho"],
             },
-            "required": ["caminho"]
-        }
-    }
-},
+        },
+    },
     {
-    "type": "function",
-    "function": {
-        "name": "search",
-        "description": """
+        "type": "function",
+        "function": {
+            "name": "search",
+            "description": """
             Pesquisa informações na internet.
 
             Use quando o usuário solicitar uma pesquisa na web ou quando
@@ -205,23 +213,23 @@ tools = [
             Prefira consultar fontes relevantes antes de responder sobre
             informações atuais.
         """,
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "consulta": {
-                    "type": "string",
-                    "description": "Consulta que será enviada ao mecanismo de busca."
-                }
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "consulta": {
+                        "type": "string",
+                        "description": "Consulta que será enviada ao mecanismo de busca.",
+                    }
+                },
+                "required": ["consulta"],
             },
-            "required": ["consulta"]
-        }
-    }
-},
-{
-    "type": "function",
-    "function": {
-        "name": "read_page",
-        "description": """
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_page",
+            "description": """
             Acessa e analisa uma página encontrada na internet.
 
             Use esta ferramenta quando precisar verificar o conteúdo de uma
@@ -236,23 +244,23 @@ tools = [
             resultados de search. Considere a página analisada somente após
             read_page retornar com sucesso.
         """,
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "url": {
-                    "type": "string",
-                    "description": "URL completa da página que será analisada."
-                }
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "URL completa da página que será analisada.",
+                    }
+                },
+                "required": ["url"],
             },
-            "required": ["url"]
-        }
-    }
-},
-{
-    "type": "function",
-    "function": {
-        "name": "today",
-        "description": """
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "today",
+            "description": """
             Retorna a data e o horário atuais do computador, incluindo
             o dia da semana.
 
@@ -262,18 +270,14 @@ tools = [
             Não estime essas informações usando conhecimento próprio,
             pois a ferramenta consulta o relógio do sistema.
         """,
-        "parameters": {
-            "type": "object",
-            "properties": {},
-            "required": []
-        }
-    }
-},
-{
-    "type": "function",
-    "function": {
-        "name": "date_previous",
-        "description": """
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "date_previous",
+            "description": """
             Determina o dia da semana correspondente a uma data informada.
 
             Use quando for necessário descobrir em qual dia da semana
@@ -281,26 +285,26 @@ tools = [
 
             A data deve ser fornecida no formato DD/MM/AAAA.
         """,
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "string",
-                    "description": """
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "string",
+                        "description": """
                         Data que será consultada no formato DD/MM/AAAA.
                         Exemplo: 28/09/2026.
-                    """
-                }
+                    """,
+                    }
+                },
+                "required": ["data"],
             },
-            "required": ["data"]
-        }
-    }
-},
-{
-    "type": "function",
-    "function": {
-        "name": "calc_data",
-        "description": """
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calc_data",
+            "description": """
             Calcula uma nova data adicionando ou subtraindo uma quantidade
             de dias de uma data de referência.
 
@@ -315,27 +319,75 @@ tools = [
             Caso seja necessário calcular em relação à data atual,
             utilize primeiro a ferramenta today para descobrir a data.
         """,
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "dias": {
-                    "type": "integer",
-                    "description": """
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "dias": {
+                        "type": "integer",
+                        "description": """
                         Quantidade de dias que será adicionada ou subtraída.
                         Valores positivos avançam no tempo e valores negativos
                         retrocedem.
-                    """
-                },
-                "data": {
-                    "type": "string",
-                    "description": """
+                    """,
+                    },
+                    "data": {
+                        "type": "string",
+                        "description": """
                         Data de referência no formato DD/MM/AAAA.
                         Exemplo: 28/09/2026.
-                    """
-                }
+                    """,
+                    },
+                },
+                "required": ["dias", "data"],
             },
-            "required": ["dias", "data"]
-        }
-    }
-}
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "lembrar_conversa",
+            "description": (
+                "Busca e recupera informações de conversas anteriores armazenadas "
+                "na memória persistente do agente. Use quando o usuário mencionar "
+                "algo discutido anteriormente, pedir para lembrar uma conversa, "
+                "decisão, informação, projeto ou contexto passado. "
+                "A busca atualmente é textual, portanto forneça em 'content' "
+                "palavras-chave curtas e relevantes que provavelmente apareceram "
+                "na conversa original."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "string",
+                        "description": (
+                            "Texto ou palavras-chave para localizar mensagens antigas. "
+                            "Prefira termos específicos, nomes de projetos, tecnologias, "
+                            "pessoas, arquivos ou assuntos, em vez de frases longas."
+                        ),
+                    },
+                    "role": {
+                        "type": ["string", "null"],
+                        "enum": ["user", "assistant", None],
+                        "description": (
+                            "Opcional. Restringe a busca às mensagens do usuário ou "
+                            "do assistente. Use null quando a origem da informação "
+                            "não importar."
+                        ),
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 50,
+                        "default": 30,
+                        "description": (
+                            "Quantidade máxima de mensagens antigas que podem ser "
+                            "recuperadas antes da sumarização."
+                        ),
+                    },
+                },
+                "required": ["content"],
+            },
+        },
+    },
 ]

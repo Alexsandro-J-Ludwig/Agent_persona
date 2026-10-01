@@ -1,22 +1,22 @@
-"""Comunicação com Ollama e exibição incremental da resposta no terminal.
+"""Recebe a resposta do modelo e atualiza o terminal progressivamente.
 
-Este módulo coleta conteúdo, raciocínio e ferramentas; não altera o histórico
-e não executa ferramentas. Isso mantém a apresentação separada da orquestração.
+A execução de ferramentas e a manutenção do histórico ficam em agent.py.
+Este módulo apenas coleta texto, raciocínio e chamadas de ferramentas.
 """
 
+from contextlib import nullcontext
 from typing import Any
 
 from ollama import Client
 from rich.console import Console
-from rich.live import Live
-from rich.markdown import Markdown
-
-from .status_messages import processing_message
 
 import tools
+
 from .config import KEEP_ALIVE, MODEL, NUM_CTX
 from .history import prepare_messages
-from .tasks import TASK_TOOLS, TaskDisplay
+from .status_messages import processing_message
+from .tasks import TASK_TOOLS, TaskDisplay, TaskManager
+
 
 def stream_model(
     messages: list[dict[str, Any]],
@@ -26,107 +26,79 @@ def stream_model(
     console: Console,
     display: TaskDisplay | None = None,
 ):
-    """
-    Executa uma rodada do modelo com streaming.
+    """Executa uma rodada do modelo com streaming.
 
     Retorna:
-        content
-        thinking
-        tool_calls
+        content: texto da resposta.
+        thinking: raciocínio recebido.
+        tool_calls: ferramentas solicitadas pelo modelo.
+
+    Erros continuam sendo tratados pelo agente que chamou esta função.
     """
 
-    # Ferramentas de plano pertencem à sessão; precisam ser anunciadas junto
-    # das ferramentas de negócio para que o modelo consiga chamá-las.
     definitions = tools.tools + TASK_TOOLS
-    stream = client.chat(
-        model=MODEL,
-        messages=prepare_messages(messages, definitions),
-        think=think_mode,
-        tools=definitions,
-        keep_alive=KEEP_ALIVE,
-        stream=True,
-        options={"num_ctx": NUM_CTX},
-    )
+    prepared = prepare_messages(messages, definitions)
 
-    content = ""
-    thinking = ""
+    content_parts: list[str] = []
+    thinking_parts: list[str] = []
     tool_calls = []
+    stream = None
 
-    if display is not None:
-        # O Agent já abriu um painel Live para o turno inteiro. Reutilize-o,
-        # em vez de iniciar outro Live/status que deslocaria a lista de tarefas.
-        display.status(processing_message())
-        try:
-            for chunk in stream:
-                thinking += chunk.message.thinking or ""
-                tool_calls.extend(chunk.message.tool_calls or [])
-                if chunk.message.content:
-                    content += chunk.message.content
-                    display.response(content)
-        finally:
-            if hasattr(stream, "close"):
-                stream.close()
-            display.finish_response(content)
-        return content, thinking, tool_calls
-
-    # --------------------------------------------------------
-    # Espera até aparecer conteúdo.
-    #
-    # console.status possui animação própria em background,
-    # então continua animando mesmo enquanto esperamos
-    # o primeiro chunk da rede/modelo.
-    # --------------------------------------------------------
-
-    status_text = (
-        f"[bold red]{processing_message()}[/bold red]"
-        if think_mode
-        else f"[bold yellow]{processing_message()}[/bold yellow]"
+    # O agente já mantém um painel durante o turno.
+    # nullcontext permite usá-lo sem abri-lo ou fechá-lo novamente.
+    # Chamadas independentes recebem um painel temporário.
+    display_context = (
+        nullcontext(display)
+        if display is not None
+        else TaskDisplay(TaskManager(), console)
     )
 
-    first_content = False
+    with display_context as panel:
+        panel.status(processing_message())
 
-    with console.status(
-        status_text,
-        spinner="dots",
-        spinner_style="red" if think_mode else "yellow",
-    ):
-        for chunk in stream:
+        try:
+            stream = client.chat(
+                model=MODEL,
+                messages=prepared,
+                think=think_mode,
+                tools=definitions,
+                keep_alive=KEEP_ALIVE,
+                stream=True,
+                options={"num_ctx": NUM_CTX},
+            )
 
-            if chunk.message.thinking:
-                thinking += chunk.message.thinking
-
-            if chunk.message.tool_calls:
-                tool_calls.extend(chunk.message.tool_calls)
-
-            if chunk.message.content:
-                content += chunk.message.content
-                first_content = True
-                break
-
-    # --------------------------------------------------------
-    # Se começou a resposta visível, renderiza Markdown
-    # em streaming.
-    # --------------------------------------------------------
-
-    if first_content:
-        with Live(
-            Markdown(content),
-            console=console,
-            refresh_per_second=15,
-        ) as live:
-
+            # Um único laço consome todos os trechos da resposta.
             for chunk in stream:
+                message = chunk.message
 
-                if chunk.message.thinking:
-                    thinking += chunk.message.thinking
+                if message.thinking:
+                    thinking_parts.append(message.thinking)
 
-                if chunk.message.tool_calls:
-                    tool_calls.extend(
-                        chunk.message.tool_calls
-                    )
+                if message.tool_calls:
+                    tool_calls.extend(message.tool_calls)
 
-                if chunk.message.content:
-                    content += chunk.message.content
-                    live.update(Markdown(content))
+                if message.content:
+                    content_parts.append(message.content)
 
-    return content, thinking, tool_calls
+                    # Entrega apenas o trecho novo. A interface controla o ritmo
+                    # de desenho; nenhum token fica esperando o próximo chegar.
+                    # Uma futura fila de voz pode receber este mesmo trecho.
+                    panel.append_response(message.content)
+
+        finally:
+            # Libera a conexão mesmo se ocorrer erro ou Ctrl+C.
+            # O painel também recebe o último trecho, que pode ter chegado
+            # antes de completar o intervalo de atualização.
+            try:
+                if stream is not None:
+                    close = getattr(stream, "close", None)
+                    if callable(close):
+                        close()
+            finally:
+                panel.finish_response("".join(content_parts))
+
+    return (
+        "".join(content_parts),
+        "".join(thinking_parts),
+        tool_calls,
+    )

@@ -3,11 +3,16 @@
 Adicione novos indicadores em decide_think; os comandos explícitos têm prioridade.
 """
 
-VERIFY_PROMPT = "Teste individualmente todas as ferramentas disponíveis e apresente os resultados."
+VERIFY_PROMPT = (
+    "Teste individualmente todas as ferramentas disponíveis e apresente os resultados."
+)
 
 
 def is_verification_prompt(prompt: str) -> bool:
-    return prompt == VERIFY_PROMPT or prompt.strip().casefold().split(" ", 1)[0] == "/verify"
+    return (
+        prompt == VERIFY_PROMPT
+        or prompt.strip().casefold().split(" ", 1)[0] == "/verify"
+    )
 
 
 def decide_think(prompt: str) -> tuple[bool, str]:
@@ -41,7 +46,6 @@ def decide_think(prompt: str) -> tuple[bool, str]:
         # O Agent reconhece esse comando e executa verificações controladas;
         # uma instrução em linguagem natural não garantia a cobertura da lista.
         return False, VERIFY_PROMPT
-        
 
     texto = prompt.casefold()
 

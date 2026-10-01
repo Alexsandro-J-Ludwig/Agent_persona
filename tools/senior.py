@@ -12,15 +12,18 @@ console = Console()
 user_name = os.getenv("USER")
 user_pass = os.getenv("PASS")
 
-endpoint = "http://snrsj:8080/g5-senior-services/rubi_Synccom.senior.g5.rh.fp.USUColaborador"
-header = {"Content-Type":"text/xml; charset=utf-8"}
+endpoint = (
+    "http://snrsj:8080/g5-senior-services/rubi_Synccom.senior.g5.rh.fp.USUColaborador"
+)
+header = {"Content-Type": "text/xml; charset=utf-8"}
 
 ultima_consulta = []
+
 
 def consultar_colaborador(matricula: str) -> str:
     """Executa a chamada real."""
     numemp = matricula[0]
-    
+
     payload = f"""
         <?xml version="1.0" encoding="UTF-8"?>
             <soapenv:Envelope
@@ -41,20 +44,17 @@ def consultar_colaborador(matricula: str) -> str:
             </soapenv:Body>
             </soapenv:Envelope>
         """
-    
-    resp = requests.post(
-        url=endpoint,
-        data = payload,
-        headers=header
-        )
-    
+
+    resp = requests.post(url=endpoint, data=payload, headers=header)
+
     resp.raise_for_status()
     return resp.text
+
 
 def consultar_colaboradores_ativos(DatIni: str, DatFim: str) -> tuple[str, str]:
     import re
 
-    padrao = r'^\d{2}/\d{2}/\d{4}$'
+    padrao = r"^\d{2}/\d{2}/\d{4}$"
 
     if not re.match(padrao, DatIni) or not re.match(padrao, DatFim):
         erro = "Erro: datas devem estar no formato DD/MM/AAAA."
@@ -80,33 +80,28 @@ def consultar_colaboradores_ativos(DatIni: str, DatFim: str) -> tuple[str, str]:
     </soapenv:Envelope>
     """
 
-    resp = requests.post(
-        url=endpoint,
-        data=payload,
-        headers=header
-    )
+    resp = requests.post(url=endpoint, data=payload, headers=header)
 
     resp.raise_for_status()
 
     root = ET.fromstring(resp.text)
 
-    resultado_tag = root.find('.//resultado')
+    resultado_tag = root.find(".//resultado")
 
-    if resultado_tag is None or resultado_tag.text != 'OK':
-        erro = root.find('.//erroExecucao')
+    if resultado_tag is None or resultado_tag.text != "OK":
+        erro = root.find(".//erroExecucao")
         mensagem = (
             f"Erro na consulta: "
             f"{erro.text if erro is not None and erro.text else 'erro desconhecido'}"
         )
         return mensagem, mensagem
 
-    retornos = root.findall('.//retorno')
+    retornos = root.findall(".//retorno")
     total = len(retornos)
 
     if total == 0:
         mensagem = (
-            f"Nenhum colaborador ativo encontrado no período "
-            f"{DatIni} a {DatFim}."
+            f"Nenhum colaborador ativo encontrado no período {DatIni} a {DatFim}."
         )
         return mensagem, mensagem
 
@@ -117,22 +112,24 @@ def consultar_colaboradores_ativos(DatIni: str, DatFim: str) -> tuple[str, str]:
     ultima_consulta.clear()
 
     for r in retornos:
-        ultima_consulta.append({
-            "Empresa": r.findtext("numEmp", "").strip(),
-            "matricula": r.findtext("numCad", "").strip(),
-            "nome": r.findtext("nomFun", "").strip(),
-            "CPF": r.findtext("numCpf", "").strip(),
-            "Posto de Trabalho": r.findtext("posTra", "").strip(),
-            "cargo": r.findtext("titRed", "").strip(),
-            "Codigo da Filial": r.findtext("codFil", "").strip(),
-            "filial": r.findtext("nomFil", "").strip(),
-            "admissao": r.findtext("datAdm", "").strip(),
-            "Centro de custo": r.findtext("codCcu", "").strip(),
-            "Nome do Centro de Custo": r.findtext("nomCcu", "").strip(),
-            "Codigo do Gestor": r.findtext("codGes", "").strip(),
-            "Nome do Gestor": r.findtext("nomGes", "").strip(),
-            "Email do Gestor": r.findtext("emaGes", "").strip(),
-        })
+        ultima_consulta.append(
+            {
+                "Empresa": r.findtext("numEmp", "").strip(),
+                "matricula": r.findtext("numCad", "").strip(),
+                "nome": r.findtext("nomFun", "").strip(),
+                "CPF": r.findtext("numCpf", "").strip(),
+                "Posto de Trabalho": r.findtext("posTra", "").strip(),
+                "cargo": r.findtext("titRed", "").strip(),
+                "Codigo da Filial": r.findtext("codFil", "").strip(),
+                "filial": r.findtext("nomFil", "").strip(),
+                "admissao": r.findtext("datAdm", "").strip(),
+                "Centro de custo": r.findtext("codCcu", "").strip(),
+                "Nome do Centro de Custo": r.findtext("nomCcu", "").strip(),
+                "Codigo do Gestor": r.findtext("codGes", "").strip(),
+                "Nome do Gestor": r.findtext("nomGes", "").strip(),
+                "Email do Gestor": r.findtext("emaGes", "").strip(),
+            }
+        )
 
     # -------------------------------------------------------
     # 1. CONTEÚDO QUE ENTRA NO CONTEXTO DO QWEN
@@ -145,13 +142,10 @@ def consultar_colaboradores_ativos(DatIni: str, DatFim: str) -> tuple[str, str]:
         f"Período: {DatIni} a {DatFim}.",
         f"Total de colaboradores encontrados: {total}.",
         "",
-        f"Primeiros {min(LIMITE_CONTEXTO, total)} colaboradores:"
+        f"Primeiros {min(LIMITE_CONTEXTO, total)} colaboradores:",
     ]
 
-    for indice, colaborador in enumerate(
-        ultima_consulta[:LIMITE_CONTEXTO],
-        start=1
-    ):
+    for indice, colaborador in enumerate(ultima_consulta[:LIMITE_CONTEXTO], start=1):
         memoria.append(
             f"{indice}. "
             f"{colaborador['matricula']} | "
@@ -174,15 +168,13 @@ def consultar_colaboradores_ativos(DatIni: str, DatFim: str) -> tuple[str, str]:
     # 2. CONTEÚDO EXIBIDO DIRETAMENTE AO USUÁRIO
     # -------------------------------------------------------
 
-    console.print(
-        f"\n[bold cyan]Total de colaboradores: {total}[/bold cyan]\n"
-    )
-    
+    console.print(f"\n[bold cyan]Total de colaboradores: {total}[/bold cyan]\n")
+
     table = Table(
-    title=f"Colaboradores Ativos — {DatIni} a {DatFim}",
-    show_header=True,
-    header_style="bold cyan",
-    show_lines=False
+        title=f"Colaboradores Ativos — {DatIni} a {DatFim}",
+        show_header=True,
+        header_style="bold cyan",
+        show_lines=False,
     )
 
     table.add_column("#", justify="right")
@@ -227,10 +219,10 @@ def consultar_colaboradores_ativos(DatIni: str, DatFim: str) -> tuple[str, str]:
     )
 
     return (
-    f"Consulta concluída com sucesso para o período "
-    f"{DatIni} a {DatFim}. "
-    f"Foram encontrados {total} colaboradores. "
-    f"A listagem completa com os {total} registros já foi "
-    f"exibida diretamente ao usuário pela ferramenta. "
-    f"Não repita a listagem."
-)
+        f"Consulta concluída com sucesso para o período "
+        f"{DatIni} a {DatFim}. "
+        f"Foram encontrados {total} colaboradores. "
+        f"A listagem completa com os {total} registros já foi "
+        f"exibida diretamente ao usuário pela ferramenta. "
+        f"Não repita a listagem."
+    )

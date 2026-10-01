@@ -3,7 +3,9 @@
 TaskManager guarda o estado real. O painel e o contexto do modelo são derivados
  dele, para que a tela não mostre uma conclusão diferente da usada pelo agente.
 """
+
 from dataclasses import dataclass, field
+from threading import RLock
 from typing import Literal
 
 from rich.console import Console, Group
@@ -40,37 +42,47 @@ class TaskManager:
         """Um plano não pode apagar tarefas existentes no mesmo turno."""
         if self.tasks:
             raise ValueError("Já existe um plano. Atualize as tarefas existentes.")
-        
+
         if not isinstance(descriptions, list) or not 1 <= len(descriptions) <= 50:
             raise ValueError("Informe uma lista de 1 a 50 tarefas.")
-        
-        if any(not isinstance(d, str) or not d.strip() or len(d) > 200 for d in descriptions):
-            raise ValueError("Cada tarefa precisa de uma descrição de 1 a 200 caracteres.")
-        
+
+        if any(
+            not isinstance(d, str) or not d.strip() or len(d) > 200
+            for d in descriptions
+        ):
+            raise ValueError(
+                "Cada tarefa precisa de uma descrição de 1 a 200 caracteres."
+            )
+
         self.tasks = [Task(i + 1, text.strip()) for i, text in enumerate(descriptions)]
 
     def next(self) -> Task | None:
         return next((t for t in self.tasks if t.status == "in_progress"), None) or next(
-            (t for t in self.tasks if t.status == "pending"), None,
+            (t for t in self.tasks if t.status == "pending"),
+            None,
         )
 
     def start(self, task_id: int) -> None:
         task = self._get(task_id)
-        
+
         if task.status == "completed":
-            raise ValueError("Uma tarefa concluída não pode ser reiniciada neste plano.")
-        
+            raise ValueError(
+                "Uma tarefa concluída não pode ser reiniciada neste plano."
+            )
+
         if any(t.status == "in_progress" and t.id != task_id for t in self.tasks):
-            raise ValueError("Finalize ou bloqueie a tarefa em andamento antes de iniciar outra.")
-        
+            raise ValueError(
+                "Finalize ou bloqueie a tarefa em andamento antes de iniciar outra."
+            )
+
         task.status, task.result = "in_progress", None
 
     def complete(self, task_id: int, result: str | None = None) -> None:
         task = self._get(task_id)
-        
+
         if task.status not in ("in_progress", "completed"):
             raise ValueError("Inicie a tarefa antes de concluí-la.")
-        
+
         self._finish(task, "completed", result)
 
     def fail(self, task_id: int, result: str | None = None) -> None:
@@ -82,10 +94,10 @@ class TaskManager:
     def _finish(self, task: Task, status: TaskStatus, result: str | None) -> None:
         if not isinstance(result, str) or not result.strip():
             raise ValueError("Informe o resultado ou o motivo da tarefa.")
-        
+
         if task.status == "completed" and status != "completed":
             raise ValueError("A tarefa já está concluída.")
-        
+
         task.status = status  # Sem vírgula: o status deve ser uma string, nunca tupla.
         task.result = result.strip()[:2000]
 
@@ -110,13 +122,13 @@ class TaskManager:
 
     def _get(self, task_id: int) -> Task:
         if isinstance(task_id, bool) or not isinstance(task_id, int):
-            raise ValueError("task_id deve ser um número inteiro.")
-        
+            raise ValueError("task_id deve ser um número inteiro.")  # noqa: TRY004
+
         task = next((t for t in self.tasks if t.id == task_id), None)
-        
+
         if task is None:
             raise ValueError(f"Tarefa {task_id} não existe.")
-        
+
         return task
 
     def render(self) -> Panel:
@@ -125,17 +137,20 @@ class TaskManager:
         table.add_column()
         table.add_column(width=13)
         for task in self.tasks:
-            
             label, color = LABELS[task.status]
             description = Text(task.description)
-            
+
             if task.result:
                 description.append("\n" + task.result, style="dim")
-                
+
             table.add_row(str(task.id), description, Text(label, style=color))
-            
+
         completed = sum(t.status == "completed" for t in self.tasks)
-        return Panel(table, title=f"Tarefas · {completed}/{len(self.tasks)} concluídas", border_style="cyan")
+        return Panel(
+            table,
+            title=f"Tarefas · {completed}/{len(self.tasks)} concluídas",
+            border_style="cyan",
+        )
 
 
 class TaskDisplay:
@@ -144,64 +159,114 @@ class TaskDisplay:
     No terminal o painel é atualizado no lugar. Em logs/redirecionamento,
     imprimimos snapshots apenas quando o estado muda, sem códigos de cursor.
     """
+
     def __init__(self, manager: TaskManager, console: Console):
-        self.manager, self.console = manager, console
+        self.manager = manager
+        self.console = console
+
         self.body = Text("")
         self.live = None
         self.last_state = ""
 
+        # O consumidor do stream e o Live usam threads diferentes. O lock
+        # protege só a troca do buffer; nunca envolve impressão no console.
+        self._lock = RLock()
+        self._pending_parts: list[str] = []
+        self._response_text = Text("")
+        self._task_state = None
+        self._task_panel = None
+
     def __enter__(self):
         if self.console.is_terminal:
-            self.live = Live(console=self.console, get_renderable=self.render,
-                             refresh_per_second=10, transient=True)
-            
+            self.live = Live(
+                console=self.console,
+                get_renderable=self.render,
+                refresh_per_second=10,
+                transient=True,
+            )
             self.live.start()
-            
-        self.refresh()
+
         return self
 
     def render(self):
-        parts = [self.body]
-        
-        if self.manager.tasks:
-            parts.append(self.manager.render())
-            
+        with self._lock:
+            if self._pending_parts:
+                self._response_text.append("".join(self._pending_parts))
+                self._pending_parts.clear()
+                self.body = self._response_text
+
+            # Rich recebe uma cópia estável enquanto novos tokens chegam.
+            body = self.body.copy() if isinstance(self.body, Text) else self.body
+
+        parts = [body]
+        state = self.manager.context()
+
+        if state != self._task_state:
+            self._task_state = state
+            self._task_panel = self.manager.render() if state else None
+
+        if self._task_panel is not None:
+            parts.append(self._task_panel)
+
         return Group(*parts)
 
     def refresh(self):
         if self.live:
             self.live.refresh()
-            
+
         else:
             state = self.manager.context()
-            
+
             if state and state != self.last_state:
                 self.console.print(self.manager.render())
-                
+
             self.last_state = state
 
     def status(self, message: str):
-        self.body = Spinner("dots", text=Text(message), style="cyan")
-        self.refresh()
+        with self._lock:
+            self._pending_parts.clear()
+            self._response_text = Text("")
+            self.body = Spinner("dots", text=Text(message), style="cyan")
 
     def response(self, content: str):
-        self.body = Markdown(content)
-        self.refresh()
+        """Substitui a resposta; útil para consumidores que já têm um snapshot."""
+        with self._lock:
+            self._pending_parts.clear()
+            self._response_text = Text(content)
+            self.body = self._response_text
+
+    def append_response(self, content: str):
+        """Acumula deltas sem analisar Markdown nem forçar refresh por token."""
+        if self.live:
+            with self._lock:
+                self._pending_parts.append(content)
+
+        else:
+            # Saída redirecionada também recebe o texto progressivamente.
+            self.console.print(content, end="", markup=False, highlight=False)
 
     def finish_response(self, content: str):
-        self.body = Text("")
-        
+        with self._lock:
+            self._pending_parts.clear()
+            self._response_text = Text("")
+            self.body = Text("")
+
         if content:
-            self.console.print(Markdown(content))
-            
-        self.refresh()
+            if self.live:
+                # A análise Markdown ocorre uma única vez, ao concluir a rodada.
+                self.console.print(Markdown(content))
+
+            else:
+                self.console.print()
 
     def __exit__(self, *exc):
-        self.body = Text("")
-        
+        with self._lock:
+            self._pending_parts.clear()
+            self.body = Text("")
+
         if self.live:
             self.live.stop()
-            
+
             if self.manager.tasks:
                 self.console.print(self.manager.render())
         else:
@@ -209,11 +274,12 @@ class TaskDisplay:
 
 
 # Publicadas ao modelo por streaming.py; a execução depende da sessão em Agent.
-TASK_TOOLS = [{
-    "type": "function",
-    "function": {
-        "name": "create_tasks",
-        "description": """
+TASK_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "create_tasks",
+            "description": """
             Cria o plano de execução e exibe suas tarefas ao usuário no terminal.
             Use em qualquer pedido com várias etapas, não apenas em /verify.
             Chame antes de começar quando precisar localizar e analisar arquivos,
@@ -225,31 +291,66 @@ TASK_TOOLS = [{
             Use uma vez por solicitação; não recrie um plano já existente.
             Respostas diretas e consultas simples de uma etapa não precisam de plano.
         """,
-        "parameters": {"type": "object", "properties": {
-            "tarefas": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 50},
-        }, "required": ["tarefas"]},
-    },
-}]
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tarefas": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "minItems": 1,
+                        "maxItems": 50,
+                    },
+                },
+                "required": ["tarefas"],
+            },
+        },
+    }
+]
 
 for name, description in (
     ("start_task", "Inicia uma tarefa do plano antes de executar sua ação."),
-    ("complete_task", "Conclui uma tarefa iniciada, somente após conferir o resultado real."),
-    ("fail_task", "Marca uma tarefa como falha e informa o erro. Continue as demais tarefas independentes."),
-    ("block_task", "Marca uma tarefa bloqueada por falta de dados ou acesso e informa o motivo."),
+    (
+        "complete_task",
+        "Conclui uma tarefa iniciada, somente após conferir o resultado real.",
+    ),
+    (
+        "fail_task",
+        "Marca uma tarefa como falha e informa o erro. Continue as demais tarefas independentes.",
+    ),
+    (
+        "block_task",
+        "Marca uma tarefa bloqueada por falta de dados ou acesso e informa o motivo.",
+    ),
 ):
     properties = {"task_id": {"type": "integer"}}
     required = ["task_id"]
     if name != "start_task":
-        properties["resultado"] = {"type": "string", "description": "Resultado observado ou motivo específico."}
+        properties["resultado"] = {
+            "type": "string",
+            "description": "Resultado observado ou motivo específico.",
+        }
         required.append("resultado")
-    TASK_TOOLS.append({"type": "function", "function": {
-        "name": name, "description": description,
-        "parameters": {"type": "object", "properties": properties, "required": required},
-    }})
+
+    TASK_TOOLS.append(
+        {
+            "type": "function",
+            "function": {
+                "name": name,
+                "description": description,
+                "parameters": {
+                    "type": "object",
+                    "properties": properties,
+                    "required": required,
+                },
+            },
+        }
+    )
+
 TASK_TOOL_NAMES = frozenset(t["function"]["name"] for t in TASK_TOOLS)
 # Estes critérios são enviados em toda rodada por _messages_for_model.
 # Ao adicionar ferramentas, acrescente exemplos aqui se surgirem novos fluxos
 # com várias etapas; mantenha a descrição de create_tasks coerente com a regra.
+
 TASK_INSTRUCTIONS = """
 PLANEJAMENTO E ACOMPANHAMENTO
 Antes de agir, avalie se a solicitação exige várias etapas distintas.

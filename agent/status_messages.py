@@ -1,6 +1,6 @@
 import random
 
-PROCESSING_MESSAGES  = [
+PROCESSING_MESSAGES = [
     "Pensando...",
     "Analisando...",
     "Compilando...",
@@ -116,8 +116,9 @@ PROCESSING_MESSAGES  = [
     "Evitando o AppData por motivos traumáticos...",
     "Não entrando no Postman desta vez...",
     "Inventando um caminho... brincadeira.",
-    "Pedindo aumento para o chefe..."
+    "Pedindo aumento para o chefe...",
 ]
+
 
 def processing_message() -> str:
     return random.choice(PROCESSING_MESSAGES)

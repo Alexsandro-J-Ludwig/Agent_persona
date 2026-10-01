@@ -27,23 +27,25 @@ def explicit_file_search(prompt: str) -> dict | None:
     """Retorna argumentos para pesquisar_arquivo quando há nome identificável."""
     if not FILE_CONTEXT.search(prompt):
         return None
-    
+
     match = NAMED_FILE.search(prompt)
-    
+
     if match:
         # A expressão após "chamado" é o nome; ponto final é pontuação.
         term = match.group(1).strip().strip(". ,;:!?\"'`")
-        
+
     else:
-        match = FILE_WITH_EXTENSION.search(prompt) or FILE_WITH_UNDERSCORES.search(prompt)
+        match = FILE_WITH_EXTENSION.search(prompt) or FILE_WITH_UNDERSCORES.search(
+            prompt
+        )
         term = match.group(1) if match else ""
-        
+
     if not term or len(term.split()) > 8:
         return None
-    
+
     args = {"termo": term}
-    
+
     if NETWORK_CONTEXT.search(prompt):
         args["diretorio"] = os.getenv("AGENT_NETWORK_ROOT", NETWORK_ROOT)
-        
+
     return args

@@ -1,21 +1,19 @@
 """
-    Aqui é apontado as ferramentas no qual o agente de IA pode acessar
+Aqui é apontado as ferramentas no qual o agente de IA pode acessar
 """
 
-from tools.web import (search, read_page)
+from tools.web import read_page, search
 
+from .arquivos import listar_diretorio, pesquisar_arquivo
+from .documentos import buscar_documento, ler_documento
 from .senior import (
     consultar_colaborador,
     consultar_colaboradores_ativos,
 )
-
-from .arquivos import pesquisar_arquivo, listar_diretorio
-from .documentos import buscar_documento, ler_documento
-
 from .utilities import (
-    today,
-    date_previous,
     calc_data,
+    date_previous,
+    today,
 )
 
 AVAILABLE_TOOLS = {
