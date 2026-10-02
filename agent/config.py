@@ -8,17 +8,31 @@ import os
 from dotenv import load_dotenv
 from ollama import Client
 
-MODEL = "qwen3.8-flash-next:latest"
+MODEL_CONFIG = {
+    "agent": {
+        "model": "qwen3-coder-30b-a3b-instruct:latest",
+        "num_ctx": 8192,
+        "keep_alive": "30m",
+    },
+    "think": {
+        "model": "qwen3-next-80b-a3b-thinking:latest",
+        "num_ctx": 16384,
+        "keep_alive": 0,
+    },
+    "multimodal": {
+        "model": "gemma4:e4b",
+        "num_ctx": 8192,
+        "keep_alive": "5m",
+    },
+    "tts": {"model": "kokoro:latest", "keep_alive": "5m"},
+}
+
 HOST = "https://api.incubebots.com"
 NETWORK_ROOT = "Z:/"  # Unidade de rede apresentada ao modelo em tools/schemas.py.
 # Mantém o modelo carregado entre mensagens próximas.
-KEEP_ALIVE = "30m"
+
 MAX_TOOL_ROUNDS = 20
 MAX_HISTORY_MESSAGES = 32
-
-# O servidor estava usando 4096 tokens, insuficientes após ler documentos.
-# O aumento usa mais memória no servidor; mantenha o orçamento abaixo coerente.
-NUM_CTX = 8192
 
 # Numero de bytes permitidas para leitura doo modelo
 MAX_INPUT_BYTES = 49152

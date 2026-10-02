@@ -2,17 +2,15 @@
 Aqui é apontado as ferramentas no qual o agente de IA pode acessar
 """
 
-from tools.web import read_page, search
+from tools.native.web import read_page, search
 
-from .arquivos import listar_diretorio, pesquisar_arquivo
-from .documentos import buscar_documento, ler_documento
-from .senior import (
+from .extern.senior import (
     consultar_colaborador,
     consultar_colaboradores_ativos,
 )
-from .utilities import (
-    calc_data,
-    date_previous,
+from .native.arquivos import listar_diretorio, pesquisar_arquivo
+from .native.documentos import buscar_documento, ler_documento
+from .native.utilities import (
     today,
 )
 
@@ -26,6 +24,4 @@ AVAILABLE_TOOLS = {
     "search": search,
     "read_page": read_page,
     "today": today,
-    "date_previous": date_previous,
-    "calc_data": calc_data,
 }

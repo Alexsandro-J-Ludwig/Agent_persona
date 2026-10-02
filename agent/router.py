@@ -15,39 +15,34 @@ def is_verification_prompt(prompt: str) -> bool:
     )
 
 
-def decide_think(prompt: str) -> tuple[bool, str]:
-    """
-    Decide rapidamente se deve usar thinking.
+def decide_think(prompt: str) -> tuple[bool, dict, str]:
+    """Seleciona inicialmente o modelo.
 
-    /think força thinking.
-    /fast força resposta sem thinking.
-
-    Sem comando explícito, usa heurística local.
-    Isso evita fazer uma segunda chamada ao LLM apenas
-    para decidir se ele deve pensar.
+    Comandos explícitos bloqueiam a seleção.
+    Heurísticas resolvem casos óbvios.
+    Casos comuns podem ser reavaliados pelo Agent.
     """
+
+    from agent.config import MODEL_CONFIG
 
     prompt = prompt.strip()
-    lower = prompt.lower()
+    lower = prompt.casefold()
 
+    # Comandos explícitos
     if lower == "/think":
-        return True, ""
+        return True, MODEL_CONFIG["think"], ""
 
     if lower.startswith("/think "):
-        return True, prompt[7:].strip()
+        return True, MODEL_CONFIG["think"], prompt[7:].strip()
 
     if lower == "/fast":
-        return False, ""
+        return False, MODEL_CONFIG["agent"], ""
 
     if lower.startswith("/fast "):
-        return False, prompt[6:].strip()
+        return False, MODEL_CONFIG["agent"], prompt[6:].strip()
 
     if lower == "/verify" or lower.startswith("/verify "):
-        # O Agent reconhece esse comando e executa verificações controladas;
-        # uma instrução em linguagem natural não garantia a cobertura da lista.
-        return False, VERIFY_PROMPT
-
-    texto = prompt.casefold()
+        return False, MODEL_CONFIG["agent"], VERIFY_PROMPT
 
     indicadores_complexos = (
         "analise",
@@ -75,10 +70,13 @@ def decide_think(prompt: str) -> tuple[bool, str]:
         "vetor",
     )
 
+    # Casos obviamente complexos nem precisam do classificador.
     if len(prompt) > 350:
-        return True, prompt
+        return True, MODEL_CONFIG["think"], prompt
 
-    if any(indicador in texto for indicador in indicadores_complexos):
-        return True, prompt
+    if any(indicador in lower for indicador in indicadores_complexos):
+        return True, MODEL_CONFIG["think"], prompt
 
-    return False, prompt
+    # Caso aparentemente simples.
+    # Agent ainda pode avaliar se precisa escalar.
+    return False, MODEL_CONFIG["agent"], prompt

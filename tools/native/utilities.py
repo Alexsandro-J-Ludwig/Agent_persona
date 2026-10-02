@@ -49,14 +49,3 @@ def date_previous(data: str) -> dict:
     dia_semana = dias[data_informada.weekday()]
 
     return {"Dia da semana": dia_semana}
-
-
-# Retorna a data com diferença de dias informado
-def calc_data(dias: int, data: str) -> dict:
-    import datetime
-
-    data_informada = datetime.datetime.strptime(data, "%d/%m/%Y").date()
-
-    data_encontrada = data_informada + datetime.timedelta(days=dias)
-
-    return {"data": data_encontrada.strftime("%d/%m/%Y")}

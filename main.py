@@ -34,8 +34,8 @@ async def main() -> None:
                 continue
 
             # O roteador retorna o modo e o texto sem o comando de controle.
-            think_mode, prompt = decide_think(user_prompt)
-            await agent.run_agent(prompt, think_mode)
+            think_mode, model, prompt = decide_think(user_prompt)
+            await agent.run_agent(prompt, think_mode, model)
     except (EOFError, KeyboardInterrupt):
         console.print("\n[dim]Conversa encerrada.[/dim]")
 

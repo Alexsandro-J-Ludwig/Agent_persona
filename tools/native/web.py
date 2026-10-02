@@ -35,8 +35,9 @@ def search(consulta: str) -> list[dict]:
 
 
 def available_risk(url: str) -> dict:
-    import requests
     import os
+
+    import requests
 
     api_key = os.getenv("GOOGLE_WEBRISK_API_KEY")
 
@@ -70,7 +71,7 @@ def available_risk(url: str) -> dict:
 
 
 def resume_page(conteudo: str) -> dict:
-    from agent.config import create_client, MODEL, KEEP_ALIVE, NUM_CTX
+    from agent.config import MODEL_CONFIG, create_client
 
     client = create_client()
 
@@ -95,11 +96,11 @@ def resume_page(conteudo: str) -> dict:
         """
 
     response = client.chat(
-        model=MODEL,
+        model=MODEL_CONFIG[1],
         messages=[{"role": "user", "content": prompt}],
         think=True,
-        keep_alive=KEEP_ALIVE,
-        options={"num_ctx": NUM_CTX},
+        keep_alive=MODEL_CONFIG[1],
+        options={"num_ctx": MODEL_CONFIG[1]},
     )
 
     return {"resumo_pagina": response.message.content}

@@ -180,8 +180,8 @@ class AgentTerminal(App):
                     display_factory=TerminalDisplay,
                 )
 
-            think_mode, clean_prompt = decide_think(prompt)
-            asyncio.run(self.agent.run_agent(clean_prompt, think_mode))
+            think_mode, model, clean_prompt = decide_think(prompt)
+            asyncio.run(self.agent.run_agent(clean_prompt, think_mode, model))
 
         except Exception as error:
             self.events.put(("print", Text(f"Falha: {error}", style="red")))

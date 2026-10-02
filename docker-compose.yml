@@ -1,0 +1,247 @@
+services:
+  # ============================================================
+  # OLLAMA
+  # ============================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+
+    gpus: all
+
+    environment:
+      OLLAMA_HOST: "0.0.0.0:11434"
+      OLLAMA_ORIGINS: "${OLLAMA_ORIGINS}"
+
+      # Default global.
+      # As chamadas Python sobrescrevem isso com keep_alive.
+      OLLAMA_KEEP_ALIVE: "30m"
+
+      # Permite manter o Agent residente enquanto o Think entra.
+      OLLAMA_MAX_LOADED_MODELS: "2"
+
+      # Inicialmente uma inferência por vez.
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_QUEUE: "100"
+
+      # Ajuda principalmente conforme o contexto aumenta.
+      OLLAMA_FLASH_ATTENTION: "1"
+
+      # KV menor que F16 sem precisar ir direto para Q4.
+      OLLAMA_KV_CACHE_TYPE: "q8_0"
+
+    volumes:
+      - ollama_data:/root/.ollama
+
+    networks:
+      - ollama_network
+
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+
+  # ============================================================
+  # MODELOS
+  #
+  # Agent:
+  #   Qwen3-Coder-30B-A3B-Instruct IQ4_NL
+  #   ~17.3 GB
+  #
+  # Think:
+  #   Qwen3-Next-80B-A3B-Thinking IQ4_NL
+  #   ~45.3 GB
+  #
+  # Multimodal:
+  #   Gemma 4 E4B Q4_K_M
+  #   ~6.6 GB
+  #
+  # Total dos pesos Ollama: ~69.2 GB
+  # ============================================================
+  model-init:
+    image: ollama/ollama:latest
+    container_name: ollama-model-init
+    restart: "no"
+
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
+
+    volumes:
+      - ollama_data:/root/.ollama
+
+    networks:
+      - ollama_network
+
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+    entrypoint: ["/bin/sh", "-c"]
+
+    command:
+      - |
+        set -eu
+
+        install_model() {
+          SOURCE="$$1"
+          TARGET="$$2"
+
+          echo "------------------------------------------"
+          echo "Modelo: $$TARGET"
+          echo "Fonte:  $$SOURCE"
+
+          if ollama show "$$TARGET" >/dev/null 2>&1; then
+            echo "$$TARGET já está instalado."
+            return
+          fi
+
+          echo "Baixando $$SOURCE..."
+          ollama pull "$$SOURCE"
+
+          echo "Criando alias $$TARGET..."
+          ollama cp "$$SOURCE" "$$TARGET"
+
+          # Remove apenas o nome original.
+          # O blob continua referenciado pelo alias TARGET.
+          ollama rm "$$SOURCE" || true
+
+          echo "$$TARGET pronto."
+        }
+
+
+        echo "=========================================="
+        echo " Inicializando modelos do Incube Agent"
+        echo "=========================================="
+
+
+        # ------------------------------------------------------
+        # AGENT
+        # Qwen3-Coder 30B-A3B
+        # IQ4_NL ~17.3 GB
+        # ------------------------------------------------------
+
+        install_model \
+          "hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:IQ4_NL" \
+          "qwen3-coder-30b-a3b-instruct:latest"
+
+
+        # ------------------------------------------------------
+        # THINK
+        # Qwen3-Next 80B-A3B Thinking
+        # IQ4_NL ~45.3 GB
+        # ------------------------------------------------------
+
+        install_model \
+          "hf.co/bartowski/Qwen_Qwen3-Next-80B-A3B-Thinking-GGUF:IQ4_NL" \
+          "qwen3-next-80b-a3b-thinking:latest"
+
+
+        # ------------------------------------------------------
+        # MULTIMODAL
+        # Gemma 4 E4B
+        # Q4_K_M ~6.6 GB
+        # ------------------------------------------------------
+
+        install_model \
+          "gemma4:e4b-it-q4_K_M" \
+          "gemma4:e4b"
+
+
+        echo ""
+        echo "=========================================="
+        echo " Modelos instalados"
+        echo "=========================================="
+
+        ollama list
+
+        echo "=========================================="
+        echo " Inicialização concluída"
+        echo "=========================================="
+
+
+  # ============================================================
+  # KOKORO TTS
+  #
+  # Não passa pelo Ollama.
+  # Kokoro possui runtime próprio de TTS.
+  #
+  # CPU propositalmente:
+  # - apenas 82M parâmetros
+  # - não ocupa VRAM da RTX
+  # - imagem Docker bem menor
+  # ============================================================
+  kokoro:
+    image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.9.0
+    container_name: kokoro
+    restart: unless-stopped
+
+    environment:
+      API_LOG_LEVEL: "WARNING"
+
+      # Voz PT-BR feminina.
+      DEFAULT_VOICE: "pf_dora"
+
+    networks:
+      - ollama_network
+
+
+  # ============================================================
+  # SEARXNG
+  # ============================================================
+  searxng:
+    image: searxng/searxng:latest
+    container_name: searxng
+    restart: unless-stopped
+
+    volumes:
+      - searxng_config:/etc/searxng
+
+    networks:
+      - ollama_network
+
+
+  # ============================================================
+  # CLOUDFLARE TUNNEL
+  # ============================================================
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+
+    command:
+      tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+
+    networks:
+      - ollama_network
+
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+      model-init:
+        condition: service_completed_successfully
+
+      kokoro:
+        condition: service_started
+
+      searxng:
+        condition: service_started
+
+
+# ==============================================================
+# VOLUMES
+# ==============================================================
+volumes:
+  ollama_data:
+  searxng_config:
+
+
+# ==============================================================
+# NETWORK
+# ==============================================================
+networks:
+  ollama_network:
+    driver: bridge

@@ -99,7 +99,7 @@ class Database:
         role: str | None = None,
         limit: int = 30,
     ) -> str:
-        from agent.config import KEEP_ALIVE, MODEL, NUM_CTX, create_client
+        from agent.config import MODEL_CONFIG, create_client
 
         client = create_client()
 
@@ -133,10 +133,10 @@ class Database:
         """
 
         response = client.generate(
-            model=MODEL,
+            model=MODEL_CONFIG["think"]["model"],
             prompt=prompt,
-            keep_alive=KEEP_ALIVE,
-            options={"num_ctx": NUM_CTX},
+            keep_alive=MODEL_CONFIG["think"]["keep_alive"],
+            options={"num_ctx": MODEL_CONFIG["think"]["num_ctx"]},
         )
 
         return response.response

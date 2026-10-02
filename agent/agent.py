@@ -15,7 +15,7 @@ from rich.console import Console
 
 import tools
 
-from .config import MAX_TOOL_ROUNDS
+from .config import MAX_TOOL_ROUNDS, MODEL_CONFIG
 from .file_intent import explicit_file_search
 from .history import ContextLimitError, create_history, trim_history
 from .memory.database import Database
@@ -50,25 +50,34 @@ com o motivo concreto ou apresente o resultado já obtido. Não repita uma prome
 MAX_IDLE_RESPONSES = 2
 
 
-def _exact_json_match(search_result: Any, term: str) -> str | None:
+# def _exact_json_match(search_result: Any, term: str) -> str | None:
+#     if not isinstance(search_result, dict):
+#         return None
 
-    if not isinstance(search_result, dict):
-        return None
+#     matches = search_result.get("resultados", [])
 
-    matches = search_result.get("resultados", [])
+#     if len(matches) != 1:
+#         return None
 
-    if len(matches) != 1:
-        return None
+#     path = Path(matches[0].get("caminho", ""))
 
-    path = Path(matches[0].get("caminho", ""))
+#     if (
+#         path.suffix.casefold() == ".json"
+#         and path.stem.casefold() == Path(term).stem.casefold()
+#     ):
+#         return str(path)
 
-    if (
-        path.suffix.casefold() == ".json"
-        and path.stem.casefold() == Path(term).stem.casefold()
-    ):
-        return str(path)
+#     return None
 
-    return None
+
+"""Recebe a resposta do modelo e atualiza o terminal progressivamente.
+
+A execução de ferramentas e a manutenção do histórico ficam em agent.py.
+Este módulo apenas coleta texto, raciocínio e chamadas de ferramentas.
+"""
+
+from contextlib import nullcontext
+from typing import Any
 
 
 class Agent:
@@ -251,12 +260,16 @@ class Agent:
         self.console.print(text, style=style, markup=True)
         self.history.append({"role": "assistant", "content": text})
 
-    async def run_agent(self, prompt: str, think_mode: bool) -> None:
+    async def run_agent(self, prompt: str, think_mode: bool, model) -> None:
+        from .config import create_client
+
         # Não carregue tarefas pendentes de um pedido antigo para um novo pedido.
         # O histórico guarda o relatório anterior; um novo plano pode retomá-lo.
         self.tasks.clear()
         self.history.append({"role": "user", "content": prompt})
         self.db.salvar_mensagem(role="user", content=prompt)
+
+        client = create_client()
 
         with self.display_factory(self.tasks, self.console) as display:
             self.display = display
@@ -282,7 +295,34 @@ class Agent:
                     )
 
                 else:
-                    await self._run_turn(prompt, think_mode)
+                    original_prompt = prompt
+
+                    if model == MODEL_CONFIG["agent"]:
+                        prompt = f"""
+                            Classifique a solicitação abaixo.
+
+                            Use "think" quando exigir raciocínio complexo, planejamento,
+                            análise profunda, matemática, arquitetura ou depuração difícil.
+
+                            Use "agent" para tarefas comuns, conversação simples ou execução
+                            direta de ferramentas.
+
+                            Responda APENAS com:
+                            think
+                            ou
+                            agent
+
+                            SOLICITAÇÃO:
+                            {original_prompt}
+                        """
+
+                        response = client.generate(
+                            MODEL_CONFIG["agent"]["model"],
+                            prompt,
+                        )
+                        model = response.response.strip().casefold()
+
+                    await self._run_turn(original_prompt, think_mode, model)
 
             except (
                 ResponseError,
@@ -314,39 +354,39 @@ class Agent:
                 self.display = None
                 self.history = trim_history(self.history)
 
-    async def _run_turn(self, prompt: str, think_mode: bool):
-        search_args = explicit_file_search(prompt)
+    async def _run_turn(self, prompt: str, think_mode: bool, model):
+        # search_args = explicit_file_search(prompt)
 
-        if search_args:
-            search_result = await self._invoke("pesquisar_arquivo", search_args)
-            search_error = error_message(search_result)
+        # if search_args:
+        #     search_result = await self._invoke("pesquisar_arquivo", search_args)
+        #     search_error = error_message(search_result)
 
-            if search_error:
-                self._say("A busca falhou: " + search_error, "red")
-                return
+        #     if search_error:
+        #         self._say("A busca falhou: " + search_error, "red")
+        #         return
 
-            if isinstance(search_result, dict) and not search_result.get("resultados"):
-                if search_result.get("completa") is False:
-                    reminder = (
-                        "A busca automática inicial pelo arquivo não encontrou resultados, "
-                        "mas foi PARCIAL. Isso não prova que o arquivo não existe. "
-                        "Continue a solicitação original. Se necessário, crie um plano e "
-                        "use as ferramentas disponíveis para explorar diretórios ou pesquisar "
-                        "outros locais. Não peça ao usuário um diretório antes de tentar "
-                        "descobri-lo com as ferramentas disponíveis."
-                    )
+        #     if isinstance(search_result, dict) and not search_result.get("resultados"):
+        #         if search_result.get("completa") is False:
+        #             reminder = (
+        #                 "A busca automática inicial pelo arquivo não encontrou resultados, "
+        #                 "mas foi PARCIAL. Isso não prova que o arquivo não existe. "
+        #                 "Continue a solicitação original. Se necessário, crie um plano e "
+        #                 "use as ferramentas disponíveis para explorar diretórios ou pesquisar "
+        #                 "outros locais. Não peça ao usuário um diretório antes de tentar "
+        #                 "descobri-lo com as ferramentas disponíveis."
+        #             )
 
-                else:
-                    reminder = (
-                        "A busca automática inicial não encontrou o arquivo nesse diretório. "
-                        "Continue a solicitação original e considere outros locais acessíveis."
-                    )
+        #         else:
+        #             reminder = (
+        #                 "A busca automática inicial não encontrou o arquivo nesse diretório. "
+        #                 "Continue a solicitação original e considere outros locais acessíveis."
+        #             )
 
-                return
-            path = _exact_json_match(search_result, search_args["termo"])
+        #         return
+        #     path = _exact_json_match(search_result, search_args["termo"])
 
-            if path:
-                await self._invoke("ler_documento", {"caminho": path})
+        #     if path:
+        #         await self._invoke("ler_documento", {"caminho": path})
 
         idle_responses = 0
         reminder = ""
@@ -357,6 +397,7 @@ class Agent:
             content, thinking, tool_calls = stream_model(
                 self._messages_for_model(reminder),
                 think_mode,
+                model,
                 client=self.client,
                 console=self.console,
                 display=self.display,

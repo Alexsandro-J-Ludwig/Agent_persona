@@ -76,7 +76,7 @@ EXTENSOES = EXTENSOES_TEXTO | EXTENSOES_CODIGO | EXTENSOES_DOCUMENTO | EXTENSOES
 
 
 def resume_doc(texto: str, objetivo: str = "") -> str:
-    from agent.config import KEEP_ALIVE, MODEL, NUM_CTX, create_client
+    from agent.config import MODEL_CONFIG, create_client
 
     client = create_client()
 
@@ -93,10 +93,10 @@ def resume_doc(texto: str, objetivo: str = "") -> str:
     """
 
     response = client.generate(
-        model=MODEL,
+        model=MODEL_CONFIG[1],
         prompt=prompt,
-        keep_alive=KEEP_ALIVE,
-        options={"num_ctx": NUM_CTX},
+        keep_alive=MODEL_CONFIG[1],
+        options={"num_ctx": MODEL_CONFIG[1]},
     )
 
     return response.response

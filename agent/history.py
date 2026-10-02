@@ -1,7 +1,7 @@
 """Criação e retenção do contexto de cada sessão de conversa."""
 
-from typing import Any
 import json
+from typing import Any
 
 from .config import MAX_HISTORY_MESSAGES, MAX_INPUT_BYTES, SYSTEM_PROMPT
 from .memory.compressor import HistoryCompressor

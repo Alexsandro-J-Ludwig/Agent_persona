@@ -12,7 +12,7 @@ from rich.console import Console
 
 import tools
 
-from .config import KEEP_ALIVE, MODEL, NUM_CTX
+from .config import MODEL_CONFIG
 from .history import prepare_messages
 from .status_messages import processing_message
 from .tasks import TASK_TOOLS, TaskDisplay, TaskManager
@@ -21,6 +21,7 @@ from .tasks import TASK_TOOLS, TaskDisplay, TaskManager
 def stream_model(
     messages: list[dict[str, Any]],
     think_mode: bool,
+    model: str,
     *,
     client: Client,
     console: Console,
@@ -58,13 +59,13 @@ def stream_model(
 
         try:
             stream = client.chat(
-                model=MODEL,
+                model=MODEL_CONFIG[model]["model"],
                 messages=prepared,
                 think=think_mode,
                 tools=definitions,
-                keep_alive=KEEP_ALIVE,
+                keep_alive=MODEL_CONFIG[model]["keep_alive"],
                 stream=True,
-                options={"num_ctx": NUM_CTX},
+                options={"num_ctx": MODEL_CONFIG[model]["num_ctx"]},
             )
 
             # Um único laço consome todos os trechos da resposta.
@@ -97,8 +98,8 @@ def stream_model(
             finally:
                 panel.finish_response("".join(content_parts))
 
-    return (
-        "".join(content_parts),
-        "".join(thinking_parts),
-        tool_calls,
-    )
+        return (
+            "".join(content_parts),
+            "".join(thinking_parts),
+            tool_calls,
+        )

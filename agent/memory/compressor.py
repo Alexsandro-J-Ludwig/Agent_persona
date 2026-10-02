@@ -1,10 +1,10 @@
-from agent.config import MODEL, create_client
+from agent.config import MODEL_CONFIG, create_client
 
 
 class HistoryCompressor:
     def __init__(self):
         self.client = create_client()
-        self.model = MODEL
+        self.model = MODEL_CONFIG["agent"]["model"]
 
     def comprimir(self, mensagens: list[dict], resumo_anterior: str = "") -> str:
 
