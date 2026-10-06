@@ -79,32 +79,25 @@ Ollama::json Ollama::chat(
     return json::parse(response->body);
 }
 
-void Ollama::chatStream(
+std::string Ollama::chatStream(
     const Model &model,
     const std::vector<json> &messages,
-    const std::string &prompt,
     StreamCallback callback,
     bool thinking)
 {
-    auto requestMessages = messages;
-
-    requestMessages.push_back({{"role", "user"},
-                               {"content", prompt}});
-
     json body = {
         {"model", model.name},
-        {"messages", requestMessages},
+        {"messages", messages},
         {"stream", true},
         {"keep_alive", model.keep_alive},
         {"think", thinking},
         {"options", {{"num_ctx", model.num_ctx}}}};
 
-    // POST usando ContentReceiver da httplib
-
     std::string buffer;
+    std::string responseText;
 
     auto receiver =
-        [&buffer, callback](const char *data, std::size_t lenght)
+        [&buffer, &responseText, callback](const char *data, std::size_t lenght)
     {
         buffer.append(data, lenght);
 
@@ -120,8 +113,53 @@ void Ollama::chatStream(
 
             json chunk = json::parse(line);
 
-            callback(chunk);
+            std::string content =
+                chunk["message"].value("content", "");
+
+            responseText += content;
+
+            callback(content);
         }
+
         return true;
     };
+
+    httplib::Headers headers;
+
+    auto response = client->Post(
+        "/api/chat",
+        headers,
+        body.dump(),
+        "application/json",
+        receiver);
+
+    if (!response)
+    {
+        throw std::runtime_error(
+            "Falha ao conectar com o Ollama");
+    }
+
+    if (response->status < 200 || response->status >= 300)
+    {
+        throw std::runtime_error(
+            "Ollama retornou HTTP " +
+            std::to_string(response->status));
+    }
+
+    if (!buffer.empty())
+    {
+        json chunk = json::parse(buffer);
+
+        if (chunk.contains("message"))
+        {
+            std::string content =
+                chunk["message"].value("content", "");
+
+            responseText += content;
+        }
+
+        callback(chunk);
+    }
+
+    return responseText;
 }

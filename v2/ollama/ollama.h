@@ -17,7 +17,7 @@ public:
     Ollama();
     using json = nlohmann::json;
     using StreamCallback =
-        std::function<void(const json &)>;
+        std::function<void(const std::string &)>;
 
     json generate(
         const Model &model,
@@ -30,10 +30,9 @@ public:
         const std::string &prompt,
         bool thinking = false);
 
-    void chatStream(
+    std::string chatStream(
         const Model &model,
         const std::vector<json> &history,
-        const std::string &prompt,
         StreamCallback callback,
         bool thinking = false);
 
