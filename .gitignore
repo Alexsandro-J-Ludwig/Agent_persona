@@ -1,25 +1,101 @@
-# Ambiente
+# =========================
+# Python / ambiente antigo
+# =========================
 .venv/
+venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
+# =========================
 # Segredos
+# =========================
 .env
 .env.*
 !.env.example
 
+# =========================
 # Dados locais do agente
+# =========================
 data/
 *.db
 *.sqlite
 *.sqlite3
 
-# IDE
+# =========================
+# IDE / Editor
+# =========================
 .vscode/
 .idea/
+.vs/
 
-# Build
-dist/
+# =========================
+# CMake
+# =========================
 build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+compile_commands.json
+install_manifest.txt
+
+# FetchContent / dependências geradas
+_deps/
+
+# =========================
+# C / C++ compilados
+# =========================
+*.o
+*.obj
+*.lo
+
+*.exe
+*.out
+*.app
+
+*.dll
+*.so
+*.dylib
+
+*.a
+*.lib
+
+*.pdb
+*.ilk
+*.exp
+
+# Arquivos de dependência do compilador
+*.d
+
+# =========================
+# Build / distribuição
+# =========================
+dist/
+Debug/
+Release/
+RelWithDebInfo/
+MinSizeRel/
+
+# =========================
+# Python build legado
+# =========================
 *.spec
 
+# =========================
+# Sistema operacional
+# =========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =========================
+# Temporários
+# =========================
+*.tmp
+*.temp
+*.log
+*~
