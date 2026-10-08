@@ -1,7 +1,7 @@
 #ifndef HISTORYMANAGER_H
 #define HISTORYMANAGER_H
 
-#include <ollama.h>
+#include <../src/ollama/ollama.h>
 #include <vector>
 #include <string>
 

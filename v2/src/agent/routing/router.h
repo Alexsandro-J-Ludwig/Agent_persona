@@ -2,7 +2,7 @@
 #define ROUTER_H
 #include <tuple>
 
-#include "../configs/models.h"
+#include "../src/configs/models.h"
 
 class Router
 {

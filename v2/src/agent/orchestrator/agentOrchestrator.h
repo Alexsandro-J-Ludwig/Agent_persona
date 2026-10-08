@@ -1,10 +1,10 @@
 #ifndef AGENTORCHESTRATOR_H
 #define AGENTORCHESTRATOR_H
 
-#include <ollama.h>
-#include "../configs/models.h"
-#include "router.h"
-#include "historyManager.h"
+#include <../src/ollama/ollama.h>
+#include "../src/configs/models.h"
+#include "../src/agent/routing/router.h"
+#include "../src/agent/history/historyManager.h"
 
 class Orquestrador
 {

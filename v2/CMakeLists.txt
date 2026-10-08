@@ -69,19 +69,21 @@ find_package(OpenSSL REQUIRED)
 
 add_executable(agent
 
-    main.cpp
+    src/main.cpp
 
-    configs/models.cpp
-    configs/dotenv.cpp
-    configs/httplibconfig.cpp
+    src/configs/models.cpp
+    src/configs/dotenv.cpp
+    src/configs/httplibconfig.cpp
 
-    ollama/ollama.cpp
+    src/ollama/ollama.cpp
 
-    agent/orchestrator/agentOrchestrator.cpp
-    agent/routing/router.cpp
-    agent/history/historyManager.cpp
+    src/agent/orchestrator/agentOrchestrator.cpp
+    src/agent/routing/router.cpp
+    src/agent/history/historyManager.cpp
 
-    chat/chat.cpp
+    src/chat/chat.cpp
+
+    src/terminal/terminal.cpp
 
     # Futuramente:
     # terminal/terminal.cpp
