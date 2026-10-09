@@ -1,8 +1,6 @@
 #ifndef HTTPCONFIG_H
 #define HTTPCONFIG_H
 
-#define CPPHTTPLIB_OPENSSL_SUPPORT
-
 #include <httplib.h>
 #include <memory>
 #include <cstdlib>
