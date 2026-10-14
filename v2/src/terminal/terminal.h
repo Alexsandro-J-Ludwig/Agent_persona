@@ -35,6 +35,8 @@ public:
     void appendChunk(const std::uint64_t id, const std::string &chunk);
     Element commandView();
 
+    void setStatus(const std::string &status);
+
 private:
     std::string prompt;
     std::vector<ChatMessage> messages;
@@ -42,11 +44,12 @@ private:
     MessageId nextId = 0;
     float scrollPosition = 1.0f;
     bool showCommands = false;
+    std::string statusMessage;
 
     MarkdownRenderer render;
 
-    ScreenInteractive screen =
-        ScreenInteractive::TerminalOutput();
+    ftxui::ScreenInteractive screen =
+        ftxui::ScreenInteractive::Fullscreen();
 
     Component displayInput(SubmitCallback onSubmit);
 };

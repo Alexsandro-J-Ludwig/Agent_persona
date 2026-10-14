@@ -17,13 +17,24 @@ void Chat::sendMessage(const std::string &prompt)
                             {
         try
         {
+            auto [role, thinking] = orquestrador.selectModel(prompt);
+
+            terminal.setStatus(
+                std::string(role == ModelRole::Think ? "Think" : "Agent") +
+                (thinking ? " | Thinking ON" : " | Thinking OFF")
+            );
+
             orquestrador.run(
                 prompt,
+                role,
+                thinking,
                 [this, id](const std::string& chunk)
                 {
                     terminal.appendChunk(id, chunk);
                 }
             );
+
+            terminal.setStatus("");
         }
         catch (const std::exception& e)
         {

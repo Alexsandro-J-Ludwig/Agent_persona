@@ -14,7 +14,16 @@ private:
     HistoryManager manager;
 
 public:
-    void run(const std::string &prompt, Ollama::StreamCallback onChunk);
+    Orquestrador();
+
+    std::string run(
+        const std::string &prompt,
+        ModelRole role,
+        bool thinking,
+        Ollama::StreamCallback onChunk);
+
+    std::pair<ModelRole, bool> selectModel(
+        const std::string &prompt);
 };
 
 #endif

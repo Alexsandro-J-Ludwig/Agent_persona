@@ -129,6 +129,16 @@ Element TerminalDisplay::commandView()
            borderRounded | bgcolor(Color::Palette256(235)) | size(WIDTH, GREATER_THAN, 48);
 }
 
+void TerminalDisplay::setStatus(const std::string &status)
+{
+    {
+        std::lock_guard<std::mutex> lock(chat_mutex);
+        statusMessage = status;
+    }
+
+    screen.PostEvent(Event::Custom);
+}
+
 // ============================================================
 // INTERFACE PRINCIPAL
 // ============================================================
@@ -181,11 +191,28 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
     // Barra de status
     // --------------------------------------------------------
 
-    auto statusBar = Renderer([]
-                              { return hbox({text(" [Enter] Enviar ") | color(Color::Green),
-                                             text(" | [Ctrl + C] Sair") | color(Color::Red),
-                                             filler()}) |
-                                       bgcolor(Color::Palette256(236)); });
+    auto statusBar = Renderer([this]
+                              {
+    std::string status;
+
+    {
+        std::lock_guard<std::mutex> lock(chat_mutex);
+        status = statusMessage;
+    }
+
+    return hbox({
+        text(" ◌ " + status)
+            | color(Color::Yellow),
+
+        filler(),
+
+        text("[Enter] Enviar")
+            | color(Color::Green),
+
+        text(" | [Ctrl + C] Sair")
+            | color(Color::Red)
+    })
+    | bgcolor(Color::Palette256(236)); });
 
     // --------------------------------------------------------
     // Eventos de rolagem
@@ -303,13 +330,24 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
                              {
     Elements elements;
 
-    elements.push_back(chatScroll->Render() | flex);
+    // Conversa ocupa o espaço disponível.
+    elements.push_back(
+        chatScroll->Render() | flex
+    );
 
+    // Comandos opcionais.
     if (showCommands)
         elements.push_back(commandView());
 
-    elements.push_back(input->Render());
-    elements.push_back(statusBar->Render());
+    // Entrada fixa.
+    elements.push_back(
+        input->Render()
+    );
+
+    // Barra de status fixa.
+    elements.push_back(
+        statusBar->Render()
+    );
 
     return vbox(std::move(elements)) | flex; });
 
