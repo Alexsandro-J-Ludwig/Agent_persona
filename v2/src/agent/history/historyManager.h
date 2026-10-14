@@ -1,8 +1,8 @@
 #ifndef HISTORYMANAGER_H
 #define HISTORYMANAGER_H
 
-#include <../src/ollama/ollama.h>
-#include "../src/configs/agentconfig.h"
+#include "src/ollama/ollama.h"
+#include "src/configs/agentconfig.h"
 #include <vector>
 #include <string>
 
@@ -13,6 +13,8 @@ public:
     void alterSystemHistory(ModelRole role, bool thinking);
 
     void addHistory(const std::string &role, const std::string &message);
+
+    void compressor();
 
     const std::vector<Ollama::json> &getHistory() const;
 

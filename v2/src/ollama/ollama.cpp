@@ -17,7 +17,7 @@ Ollama::json Ollama::generate(
         {"prompt", prompt},
         {"stream", false},
         {"think", thinking},
-        {"options", {{"num_ctx", model.num_ctx}}}};
+        {"options", {{"num_ctx", model.num_ctx}, {"num_predict", model.num_predict}}}};
 
     auto response = client->Post(
         "/api/generate",
@@ -56,7 +56,7 @@ Ollama::json Ollama::chat(
         {"stream", false},
         {"keep_alive", model.keep_alive},
         {"think", thinking},
-        {"options", {{"num_ctx", model.num_ctx}}}};
+        {"options", {{"num_ctx", model.num_ctx}, {"num_predict", model.num_predict}}}};
 
     auto response = client->Post(
         "/api/chat",
@@ -91,7 +91,7 @@ std::string Ollama::chatStream(
         {"stream", true},
         {"keep_alive", model.keep_alive},
         {"think", thinking},
-        {"options", {{"num_ctx", model.num_ctx}}}};
+        {"options", {{"num_ctx", model.num_ctx}, {"num_predict", model.num_predict}}}};
 
     std::string buffer;
     std::string responseText;

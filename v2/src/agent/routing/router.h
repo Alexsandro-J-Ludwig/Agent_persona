@@ -4,7 +4,7 @@
 #include <tuple>
 #include <vector>
 
-#include "../src/configs/models.h"
+#include "src/configs/models.h"
 
 struct RoutingDecision
 {
@@ -25,6 +25,8 @@ public:
 
 private:
     void forceThinking(const std::string &prompt);
+    std::pair<bool, std::string>  routeDecide(const std::string &prompt);
+
     RoutingDecision agent;
 
     std::vector<SearchTerm> busca = {
@@ -56,7 +58,10 @@ private:
         {"investigue", 3},
         {"pesquise profundamente", 4},
         {"desenvolva um sistema", 4},
-        {"projete uma arquitetura", 4}};
+        {"projete uma arquitetura", 4},
+        {"demonstre formalmente", 6},
+    };
+
 };
 
 #endif

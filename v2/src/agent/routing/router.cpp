@@ -1,7 +1,11 @@
 #include "router.h"
 #include <algorithm>
 #include <cctype>
+#include <iostream>
 
+// =========================================================
+// Forca o pensmento a partir de mensagens contidas no texto
+// =========================================================
 void Router::forceThinking(const std::string &prompt)
 {
     agent.model = ModelRole::Agent;
@@ -45,9 +49,50 @@ void Router::forceThinking(const std::string &prompt)
     }
 }
 
-std::tuple<ModelRole, bool> Router::route(const std::string &prompt)
+// =============================================================
+// Decide a rota de pensamento a partir do usuario
+// =============================================================
+std::pair<bool, std::string> Router::routeDecide(const std::string &prompt)
 {
-    forceThinking(prompt);
+    std::string texto = prompt;
 
-    return {agent.model, agent.thinking};
-};
+    if (prompt.find("/fast") != std::string::npos)
+    {
+        agent.model = ModelRole::Agent;
+        agent.thinking = false;
+
+        texto.erase(0, 5);
+
+        return {true, texto};
+    }
+    else if (prompt.find("/think") != std::string::npos)
+    {
+        agent.model = ModelRole::Think;
+        agent.thinking = true;
+
+        texto.erase(0, 6);
+
+        return {true, texto};
+    }
+
+    return {false, texto};
+}
+
+// ==============================================================
+// Rota de orquestracao 
+// ==============================================================
+std::tuple<ModelRole, bool> Router::route(
+    const std::string& prompt)
+{
+    auto [select, texto] = routeDecide(prompt);
+
+if (!select)
+    forceThinking(texto);
+
+std::cerr
+    << "Model: " << static_cast<int>(agent.model)
+    << " | Thinking: " << std::boolalpha << agent.thinking
+    << '\n';
+
+return {agent.model, agent.thinking};
+}

@@ -8,8 +8,8 @@
 #include <array>
 #include <functional>
 
-#include "../configs/models.h"
-#include "../configs/httplibconfig.h"
+#include "src/configs/models.h"
+#include "src/configs/httplibconfig.h"
 
 class Ollama
 {

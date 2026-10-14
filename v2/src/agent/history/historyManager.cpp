@@ -25,6 +25,15 @@ void HistoryManager::addHistory(
                        {"content", message}});
 }
 
+// ===========================================================
+// Comprensao de contexto
+// ===========================================================
+void HistoryManager::compressor()
+{
+    
+}
+
+
 const std::vector<Ollama::json> &
 HistoryManager::getHistory() const
 {

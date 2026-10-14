@@ -1,4 +1,3 @@
-
 cmake_minimum_required(VERSION 3.25)
 
 project(
@@ -142,7 +141,7 @@ target_compile_definitions(
 )
 
 # ============================================================
-# BIBLIOTECAS
+# BIBLIOTECAS (Geral)
 # ============================================================
 
 target_link_libraries(
@@ -161,14 +160,10 @@ target_link_libraries(
         # HTTPS
         OpenSSL::SSL
         OpenSSL::Crypto
-
-        # Bibliotecas Windows
-        ws2_32
-        crypt32
 )
 
 # ============================================================
-# WINDOWS
+# WINDOWS (Configurações e Bibliotecas exclusivas)
 # ============================================================
 
 if(WIN32)
@@ -177,6 +172,13 @@ if(WIN32)
         PRIVATE
             WIN32_LEAN_AND_MEAN
             NOMINMAX
+    )
+    # Linka as libs do Windows apenas quando compilado nele
+    target_link_libraries(
+        agent
+        PRIVATE
+            ws2_32
+            crypt32
     )
 endif()
 

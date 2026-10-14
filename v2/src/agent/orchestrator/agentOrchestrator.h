@@ -1,10 +1,10 @@
 #ifndef AGENTORCHESTRATOR_H
 #define AGENTORCHESTRATOR_H
 
-#include <../src/ollama/ollama.h>
-#include "../src/configs/models.h"
-#include "../src/agent/routing/router.h"
-#include "../src/agent/history/historyManager.h"
+#include "src/ollama/ollama.h"
+#include "src/configs/models.h"
+#include "src/agent/routing/router.h"
+#include "src/agent/history/historyManager.h"
 
 class Orquestrador
 {
@@ -24,6 +24,6 @@ public:
 
     std::pair<ModelRole, bool> selectModel(
         const std::string &prompt);
-};
+}; 
 
 #endif
