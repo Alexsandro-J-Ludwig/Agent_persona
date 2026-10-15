@@ -114,6 +114,9 @@ add_executable(agent
     # Markdown
     src/markdown/markdownRenderer.cpp
     src/markdown/markdownFtxui.cpp
+
+    # Internal Tools
+    src/agent/internal_tools/internalTools.cpp
 )
 
 # ============================================================

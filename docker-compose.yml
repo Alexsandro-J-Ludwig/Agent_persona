@@ -43,13 +43,12 @@ services:
       retries: 30
       start_period: 20s
 
-
   # ============================================================
   # MODELOS
   #
   # Agent:
-  #   Qwen3-Coder-30B-A3B-Instruct IQ4_NL
-  #   ~17.3 GB
+  #   Qwen3-30B-A3B Q4_K_M (thinking ligado/desligado)
+  #   ~19 GB
   #
   # Think:
   #   Qwen3-Next-80B-A3B-Thinking IQ4_NL
@@ -59,7 +58,7 @@ services:
   #   Gemma 4 E4B Q4_K_M
   #   ~6.6 GB
   #
-  # Total dos pesos Ollama: ~69.2 GB
+  # Total dos pesos Ollama: ~70.9 GB
   # ============================================================
   model-init:
     image: ollama/ollama:latest
@@ -119,13 +118,13 @@ services:
 
         # ------------------------------------------------------
         # AGENT
-        # Qwen3-Coder 30B-A3B
-        # IQ4_NL ~17.3 GB
+        # Qwen3 30B-A3B original: tools + thinking ligado/desligado
+        # Q4_K_M ~19 GB
         # ------------------------------------------------------
 
         install_model \
-          "hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:IQ4_NL" \
-          "qwen3-coder-30b-a3b-instruct:latest"
+          "qwen3:30b-a3b-q4_K_M" \
+          "qwen3-30b-a3b:latest"
 
 
         # ------------------------------------------------------
@@ -140,14 +139,14 @@ services:
 
 
         # ------------------------------------------------------
-        # MULTIMODAL
-        # Gemma 4 E4B
-        # Q4_K_M ~6.6 GB
+        # Audio
+        # ViewNeu-TTS-0.3B
+        # Q4_0 ~202 MB
         # ------------------------------------------------------
 
         install_model \
-          "gemma4:e4b-it-q4_K_M" \
-          "gemma4:e4b"
+          "hf.co/pnnbao-ump/VieNeu-TTS-0.3B-q4-gguf:Q4_0" \
+          "viewneu-tts-0.3b:latest"
 
 
         echo ""
@@ -160,7 +159,6 @@ services:
         echo "=========================================="
         echo " Inicialização concluída"
         echo "=========================================="
-
 
   # ============================================================
   # KOKORO TTS
@@ -187,7 +185,6 @@ services:
     networks:
       - ollama_network
 
-
   # ============================================================
   # SEARXNG
   # ============================================================
@@ -202,7 +199,6 @@ services:
     networks:
       - ollama_network
 
-
   # ============================================================
   # CLOUDFLARE TUNNEL
   # ============================================================
@@ -211,8 +207,7 @@ services:
     container_name: cloudflared
     restart: unless-stopped
 
-    command:
-      tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}
 
     networks:
       - ollama_network
@@ -230,14 +225,12 @@ services:
       searxng:
         condition: service_started
 
-
 # ==============================================================
 # VOLUMES
 # ==============================================================
 volumes:
   ollama_data:
   searxng_config:
-
 
 # ==============================================================
 # NETWORK

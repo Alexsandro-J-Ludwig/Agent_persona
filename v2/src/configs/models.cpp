@@ -2,18 +2,18 @@
 
 const std::array<Model, MODEL_COUNT> MODEL_LIST =
     {{{
-          "qwen3-agent:latest",
+          "qwen3-30b-a3b:latest",
           ModelRole::Agent,
           ModelBackend::Ollama,
+          32768,
           16384,
-          8192,
           30 * MINUTE,
       },
-      {"qwen3.6-35B-A3B:latest",
+      {"qwen3-next-80b-a3b-thinking:latest",
        ModelRole::Think,
        ModelBackend::Ollama,
+       32768,
        16384,
-       8192,
        0},
       {"ViewNew-TTS:latest",
        ModelRole::TTS,
@@ -21,14 +21,12 @@ const std::array<Model, MODEL_COUNT> MODEL_LIST =
        0,
        4092,
        0},
-    {
-        "LFM2-5-audio:latest",
-        ModelRole::Audio,
-        ModelBackend::AudioService,
-        0,
-        4092,
-        0
-    }}};
+      {"LFM2-5-audio:latest",
+       ModelRole::Audio,
+       ModelBackend::AudioService,
+       0,
+       4092,
+       0}}};
 
 const Model &getModel(ModelRole role)
 {

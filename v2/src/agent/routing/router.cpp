@@ -6,7 +6,7 @@
 // =========================================================
 // Forca o pensmento a partir de mensagens contidas no texto
 // =========================================================
-void Router::forceThinking(const std::string &prompt)
+void Router::applyHeuristic(const std::string &prompt)
 {
     agent.model = ModelRole::Agent;
     agent.thinking = false;
@@ -78,21 +78,59 @@ std::pair<bool, std::string> Router::routeDecide(const std::string &prompt)
     return {false, texto};
 }
 
+void Router::decideThink(const std::string &prompt)
+{
+    ToolResult result = tool.executeSystemTool(
+        "decide_think",
+        prompt);
+
+    if (!result.success)
+        return; // Preserva a decisão heurística.
+
+    try
+    {
+        json decision = json::parse(result.output);
+
+        std::string modelName =
+            decision["model"].get<std::string>();
+
+        if (modelName != "Agent" && modelName != "Think")
+            return;
+
+        agent.model =
+            modelName == "Think"
+                ? ModelRole::Think
+                : ModelRole::Agent;
+
+        agent.thinking =
+            decision["thinking"].get<bool>();
+    }
+    catch (const json::exception &)
+    {
+        // Mantém a decisão heurística.
+    }
+}
 // ==============================================================
-// Rota de orquestracao 
+// Rota de orquestracao
 // ==============================================================
 std::tuple<ModelRole, bool> Router::route(
-    const std::string& prompt)
+    const std::string &prompt)
 {
     auto [select, texto] = routeDecide(prompt);
 
-if (!select)
-    forceThinking(texto);
+    // Comando explícito tem prioridade.
+    if (select)
+        return {agent.model, agent.thinking};
 
-std::cerr
-    << "Model: " << static_cast<int>(agent.model)
-    << " | Thinking: " << std::boolalpha << agent.thinking
-    << '\n';
+    // Classificação heurística inicial.
+    applyHeuristic(texto);
 
-return {agent.model, agent.thinking};
+    // Classificação semântica quando a heurística
+    // não selecionou o modelo Think.
+    if (agent.model == ModelRole::Agent)
+    {
+        decideThink(texto);
+    }
+
+    return {agent.model, agent.thinking};
 }
