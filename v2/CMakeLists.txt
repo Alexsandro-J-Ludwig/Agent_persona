@@ -83,6 +83,11 @@ FetchContent_MakeAvailable(md4c)
 
 find_package(OpenSSL REQUIRED)
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PORTAUDIO REQUIRED IMPORTED_TARGET portaudio-2.0)
+
+target_link_libraries(Agent PRIVATE PkgConfig::PORTAUDIO)
+
 # ============================================================
 # EXECUTÁVEL
 # ============================================================

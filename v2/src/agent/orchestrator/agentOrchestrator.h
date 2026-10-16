@@ -5,6 +5,7 @@
 #include "src/configs/models.h"
 #include "src/agent/routing/router.h"
 #include "src/agent/history/historyManager.h"
+#include "src/agent/internal_tools/internalTools.h"
 
 class Orquestrador
 {
@@ -20,10 +21,11 @@ public:
         const std::string &prompt,
         ModelRole role,
         bool thinking,
+        bool audio,
         Ollama::StreamCallback onChunk);
 
-    std::pair<ModelRole, bool> selectModel(
+    std::tuple<ModelRole, bool, bool> selectModel(
         const std::string &prompt);
-}; 
+};
 
 #endif

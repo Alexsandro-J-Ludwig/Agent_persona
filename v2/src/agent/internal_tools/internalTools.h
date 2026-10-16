@@ -11,6 +11,7 @@
 #include <format>
 #include "src/configs/models.h"
 #include "src/ollama/ollama.h"
+#include "src/audio/audioPlayer.h"
 
 enum class ToolCaller
 {
@@ -42,6 +43,8 @@ public:
 
 private:
     Ollama ollama;
+    AudioPlayer player;
+
     ToolResult execute(
         ToolCaller caller,
         std::string_view name,
@@ -53,6 +56,8 @@ private:
 
     ToolResult decideThink(
         const std::string &arguments);
+
+    ToolResult audioPlayer(const std::string &response);
 };
 
 #endif

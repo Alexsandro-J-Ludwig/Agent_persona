@@ -12,6 +12,7 @@ struct RoutingDecision
 {
     ModelRole model;
     bool thinking;
+    bool audio = false;
 };
 
 struct SearchTerm
@@ -25,7 +26,7 @@ class Router
 public:
     using json = nlohmann::json;
 
-    std::tuple<ModelRole, bool> route(const std::string &prompt);
+    std::tuple<ModelRole, bool, bool> route(const std::string &prompt);
 
 private:
     void applyHeuristic(const std::string &prompt);

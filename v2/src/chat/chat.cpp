@@ -20,7 +20,7 @@ void Chat::sendMessage(const std::string &prompt)
     try
     {
         // Faz o orquestrador selecionar o modelo e retonar
-        auto [role, thinking] =
+        auto [role, thinking, audio] =
             orquestrador.selectModel(prompt);
 
         // Envia uma mensagem de status para o usuario identificar 
@@ -41,6 +41,7 @@ void Chat::sendMessage(const std::string &prompt)
             prompt,
             role,
             thinking,
+            audio,
             [this, id](const std::string& chunk)
             {
                 terminal.appendChunk(id, chunk);
