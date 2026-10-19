@@ -1,7 +1,4 @@
 #include "router.h"
-#include <algorithm>
-#include <cctype>
-#include <iostream>
 
 // =========================================================
 // Forca o pensmento a partir de mensagens contidas no texto
@@ -76,7 +73,7 @@ std::pair<bool, std::string> Router::routeDecide(const std::string &prompt)
     }
     else if (prompt.find("/audio") != std::string::npos)
     {
-        agent.audio = true;
+        agent.audio = !agent.audio;
 
         texto.erase(0, 6);
     }

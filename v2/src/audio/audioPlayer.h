@@ -3,6 +3,7 @@
 #include <portaudio.h>
 #include <vector>
 #include <cstdint>
+#include <string>
 
 class AudioPlayer
 {
@@ -14,6 +15,8 @@ public:
     bool initialize(
         double sampleRate = 24000.0,
         int channels = 1);
+
+    bool playWav(const std::string &wav);
 
     // Reproduz um buffer PCM float32.
     bool play(const std::vector<float> &buffer);

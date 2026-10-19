@@ -1,7 +1,7 @@
 #include "agentOrchestrator.h"
-#include <tuple>
 
 Orquestrador::Orquestrador()
+    : manager(tools)
 {
 }
 
@@ -9,6 +9,9 @@ std::tuple<ModelRole, bool, bool> Orquestrador::selectModel(
     const std::string &prompt)
 {
     const auto result = router.route(prompt);
+
+    setAudioEnabled(std::get<2>(result));
+
     return {std::get<0>(result), std::get<1>(result), std::get<2>(result)};
 }
 
@@ -45,4 +48,13 @@ std::string Orquestrador::run(
     }
 
     return response;
+}
+
+void Orquestrador::setAudioEnabled(bool enabled)
+{
+    if (enabled)
+        ttsService.start(
+            L"v2\\src\\services\\tts\\server.exe");
+    else
+        ttsService.stop();
 }

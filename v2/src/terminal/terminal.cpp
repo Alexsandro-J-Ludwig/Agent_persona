@@ -19,7 +19,8 @@ Component TerminalDisplay::initDisplay()
 
 Component TerminalDisplay::thinkingStatus()
 {
-    return Renderer([this] {
+    return Renderer([this]
+                    {
         if (!isGenerating.load())
             return text("");
 
@@ -40,8 +41,7 @@ Component TerminalDisplay::thinkingStatus()
         return hbox({
             text("Pensando... ") | color(Color::Yellow2),
             text(time) | color(Color::White)
-        });
-    });
+        }); });
 }
 
 void TerminalDisplay::startThinking()
@@ -49,7 +49,8 @@ void TerminalDisplay::startThinking()
     generationStart = std::chrono::steady_clock::now();
     isGenerating.store(true);
 
-    timerThread = std::jthread([this](std::stop_token stop) {
+    timerThread = std::jthread([this](std::stop_token stop)
+                               {
         while (!stop.stop_requested() && isGenerating.load()) {
             std::this_thread::sleep_for(
                 std::chrono::milliseconds(200)
@@ -57,8 +58,7 @@ void TerminalDisplay::startThinking()
 
             if (!stop.stop_requested() && isGenerating.load())
                 screen.PostEvent(Event::Custom);
-        }
-    });
+        } });
 
     screen.PostEvent(Event::Custom);
 }
@@ -67,7 +67,8 @@ double TerminalDisplay::stopThinking()
 {
     isGenerating.store(false);
 
-    if (timerThread.joinable()) {
+    if (timerThread.joinable())
+    {
         timerThread.request_stop();
         timerThread.join();
     }
@@ -75,8 +76,8 @@ double TerminalDisplay::stopThinking()
     screen.PostEvent(Event::Custom);
 
     return std::chrono::duration<double>(
-        std::chrono::steady_clock::now() - generationStart
-    ).count();
+               std::chrono::steady_clock::now() - generationStart)
+        .count();
 }
 
 MessageId TerminalDisplay::addMessage(
@@ -180,7 +181,8 @@ Element TerminalDisplay::commandView()
     auto table = Table({{"Commands", "Function"},
                         {"/fast", "Force response speed"},
                         {"/think", "Force thinking mode"},
-                        {"/models", "Exibe os modelos atuais"}});
+                        {"/models", "Exibe os modelos atuais"},
+                        {"/audio", "Ativa ou desativa o modo de audio"}});
 
     table.SelectAll().Separator(LIGHT);
 

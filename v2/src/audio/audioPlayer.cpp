@@ -3,6 +3,60 @@
 
 #include <iostream>
 #include <limits>
+#include <algorithm>
+#include <cstring>
+#include <memory>
+#include <sndfile.h>
+
+namespace
+{
+struct WavMemory
+{
+    const std::string &bytes;
+    sf_count_t position = 0;
+};
+
+sf_count_t wavLength(void *user)
+{
+    return static_cast<sf_count_t>(static_cast<WavMemory *>(user)->bytes.size());
+}
+
+sf_count_t wavSeek(sf_count_t offset, int origin, void *user)
+{
+    auto &memory = *static_cast<WavMemory *>(user);
+    const sf_count_t length = wavLength(user);
+    sf_count_t base;
+    switch (origin)
+    {
+    case SEEK_SET: base = 0; break;
+    case SEEK_CUR: base = memory.position; break;
+    case SEEK_END: base = length; break;
+    default: return -1;
+    }
+    if (offset < -base || offset > length - base)
+        return -1;
+    memory.position = base + offset;
+    return memory.position;
+}
+
+sf_count_t wavRead(void *destination, sf_count_t count, void *user)
+{
+    auto &memory = *static_cast<WavMemory *>(user);
+    if (count <= 0) return 0;
+    count = std::min(count, wavLength(user) - memory.position);
+    if (count > 0)
+        std::memcpy(destination, memory.bytes.data() + memory.position,
+                    static_cast<size_t>(count));
+    memory.position += count;
+    return count;
+}
+
+sf_count_t wavWrite(const void *, sf_count_t, void *) { return 0; }
+sf_count_t wavTell(void *user)
+{
+    return static_cast<WavMemory *>(user)->position;
+}
+}
 
 // ============================================================
 // CONSTRUTOR / DESTRUTOR
@@ -94,6 +148,52 @@ bool AudioPlayer::openStream(PaSampleFormat format)
     sampleFormat = format;
 
     return true;
+}
+
+bool AudioPlayer::playWav(const std::string &wav)
+{
+    if (wav.empty() || wav.size() > static_cast<size_t>(std::numeric_limits<sf_count_t>::max()))
+        return false;
+
+    WavMemory memory{wav};
+    SF_VIRTUAL_IO wavVirtualIO{wavLength, wavSeek, wavRead, wavWrite, wavTell};
+    SF_INFO info{};
+
+    std::unique_ptr<SNDFILE, decltype(&sf_close)> file(sf_open_virtual(
+        &wavVirtualIO,
+        SFM_READ,
+        &info,
+        &memory), &sf_close);
+
+    if (!file)
+        return false;
+
+    if ((info.format & SF_FORMAT_TYPEMASK) != SF_FORMAT_WAV ||
+        info.frames <= 0 || info.channels <= 0 || info.samplerate <= 0 ||
+        static_cast<unsigned long long>(info.frames) >
+            std::vector<int16_t>().max_size() / static_cast<size_t>(info.channels))
+        return false;
+
+    std::vector<int16_t> samples(
+        static_cast<size_t>(info.frames) * info.channels);
+
+    sf_count_t frames = sf_readf_short(
+        file.get(),
+        samples.data(),
+        info.frames);
+
+    file.reset();
+
+    if (frames <= 0)
+        return false;
+
+    samples.resize(
+        static_cast<size_t>(frames) * info.channels);
+
+    if (!initialize(info.samplerate, info.channels))
+        return false;
+
+    return play(samples);
 }
 
 // ============================================================

@@ -6,13 +6,17 @@
 #include "src/agent/routing/router.h"
 #include "src/agent/history/historyManager.h"
 #include "src/agent/internal_tools/internalTools.h"
+#include <tuple>
+#include "src/services/ttsService/ttsService.h"
 
 class Orquestrador
 {
 private:
     Ollama ollama;
     Router router;
+    InternalTools tools;
     HistoryManager manager;
+    TTSService ttsService;
 
 public:
     Orquestrador();
@@ -26,6 +30,8 @@ public:
 
     std::tuple<ModelRole, bool, bool> selectModel(
         const std::string &prompt);
+
+    void setAudioEnabled(bool enabled);
 };
 
 #endif

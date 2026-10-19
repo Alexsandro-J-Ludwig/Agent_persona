@@ -6,9 +6,13 @@
 #include <vector>
 #include <string>
 
+class InternalTools;
+
 class HistoryManager
 {
 public:
+    explicit HistoryManager(InternalTools &tools) : tools(tools) {}
+
     void createHistory(ModelRole role, bool thinking);
     void alterSystemHistory(ModelRole role, bool thinking);
 
@@ -19,6 +23,7 @@ public:
     const std::vector<Ollama::json> &getHistory() const;
 
 private:
+    InternalTools &tools;
     std::vector<Ollama::json> history;
     const Config::Properties properties;
 };

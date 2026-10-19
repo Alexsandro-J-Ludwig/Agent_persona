@@ -99,3 +99,6 @@ desktop.ini
 *.temp
 *.log
 *~
+
+# Pesos e cache locais do serviço de voz
+/v2/src/services/tts/models/

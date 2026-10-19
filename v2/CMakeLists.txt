@@ -85,8 +85,20 @@ find_package(OpenSSL REQUIRED)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PORTAUDIO REQUIRED IMPORTED_TARGET portaudio-2.0)
+find_package(SndFile CONFIG REQUIRED)
 
-target_link_libraries(Agent PRIVATE PkgConfig::PORTAUDIO)
+# Normaliza o prefixo MSYS2 (bin/../include) para não duplicar
+# o diretório implícito do compilador e quebrar include_next.
+foreach(AUDIO_DEPENDENCY IN ITEMS SndFile::sndfile PkgConfig::PORTAUDIO)
+    get_target_property(AUDIO_INCLUDE_DIRS ${AUDIO_DEPENDENCY} INTERFACE_INCLUDE_DIRECTORIES)
+    set(AUDIO_NORMALIZED_INCLUDE_DIRS "")
+    foreach(AUDIO_INCLUDE_DIR IN LISTS AUDIO_INCLUDE_DIRS)
+        cmake_path(NORMAL_PATH AUDIO_INCLUDE_DIR OUTPUT_VARIABLE AUDIO_NORMALIZED_INCLUDE_DIR)
+        list(APPEND AUDIO_NORMALIZED_INCLUDE_DIRS "${AUDIO_NORMALIZED_INCLUDE_DIR}")
+    endforeach()
+    set_property(TARGET ${AUDIO_DEPENDENCY} PROPERTY
+        INTERFACE_INCLUDE_DIRECTORIES "${AUDIO_NORMALIZED_INCLUDE_DIRS}")
+endforeach()
 
 # ============================================================
 # EXECUTÁVEL
@@ -122,6 +134,11 @@ add_executable(agent
 
     # Internal Tools
     src/agent/internal_tools/internalTools.cpp
+
+    # Audio
+    src/audio/audioPlayer.cpp
+
+    src/services/ttsService/ttsService.cpp
 )
 
 # ============================================================
@@ -168,6 +185,9 @@ target_link_libraries(
         # HTTPS
         OpenSSL::SSL
         OpenSSL::Crypto
+
+        PkgConfig::PORTAUDIO
+        SndFile::sndfile
 )
 
 # ============================================================

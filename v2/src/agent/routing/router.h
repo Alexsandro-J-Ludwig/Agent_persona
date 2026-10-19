@@ -4,6 +4,9 @@
 #include <tuple>
 #include <vector>
 #include <json.hpp>
+#include <algorithm>
+#include <cctype>
+#include <iostream>
 
 #include "src/configs/models.h"
 #include "src/agent/internal_tools/internalTools.h"
