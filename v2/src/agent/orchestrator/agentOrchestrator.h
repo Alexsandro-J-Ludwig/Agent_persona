@@ -7,7 +7,7 @@
 #include "src/agent/history/historyManager.h"
 #include "src/agent/internal_tools/internalTools.h"
 #include <tuple>
-#include "src/services/ttsService/ttsService.h"
+#include "src/agent/orchestrator/speach/speach.h"
 
 class Orquestrador
 {
@@ -16,7 +16,7 @@ private:
     Router router;
     InternalTools tools;
     HistoryManager manager;
-    TTSService ttsService;
+    Speach speech;
 
 public:
     Orquestrador();
@@ -28,7 +28,7 @@ public:
         bool audio,
         Ollama::StreamCallback onChunk);
 
-    std::tuple<ModelRole, bool, bool> selectModel(
+    std::tuple<ModelRole, bool, bool, std::string> selectModel(
         const std::string &prompt);
 
     void setAudioEnabled(bool enabled);

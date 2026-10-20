@@ -119,6 +119,7 @@ add_executable(agent
 
     # Agente
     src/agent/orchestrator/agentOrchestrator.cpp
+    src/agent/orchestrator/speach/speach.cpp
     src/agent/routing/router.cpp
     src/agent/history/historyManager.cpp
 
@@ -213,6 +214,20 @@ endif()
 # ============================================================
 # TESTES OPCIONAIS DO MARKDOWN
 # ============================================================
+
+option(BUILD_SPEACH_TESTS "Compilar testes da fila de fala" OFF)
+
+if(BUILD_SPEACH_TESTS)
+    find_package(Threads REQUIRED)
+    enable_testing()
+    add_executable(speach_test
+        src/agent/orchestrator/speach/speach.cpp
+        tests/testSpeach.cpp
+    )
+    target_include_directories(speach_test PRIVATE ${CMAKE_SOURCE_DIR})
+    target_link_libraries(speach_test PRIVATE Threads::Threads)
+    add_test(NAME speach_queue COMMAND speach_test)
+endif()
 
 option(BUILD_MARKDOWN_TESTS "Compilar testes do parser Markdown" OFF)
 

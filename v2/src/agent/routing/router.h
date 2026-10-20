@@ -29,7 +29,7 @@ class Router
 public:
     using json = nlohmann::json;
 
-    std::tuple<ModelRole, bool, bool> route(const std::string &prompt);
+    std::tuple<ModelRole, bool, bool, std::string> route(const std::string &prompt);
 
 private:
     void applyHeuristic(const std::string &prompt);

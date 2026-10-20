@@ -1,4 +1,6 @@
 #include "internalTools.h"
+#include <chrono>
+#include <thread>
 
 ToolResult InternalTools::executeModelTool(
     std::string_view name,
@@ -196,11 +198,21 @@ ToolResult InternalTools::audioPlayer(const std::string &response)
     try
     {
         client->set_read_timeout(120, 0);
+        client->set_connection_timeout(1, 0);
 
         auto result = client->Post(
             "/tts",
             body.dump(),
             "application/json");
+
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+
+        while (!result && result.error() == httplib::Error::Connection &&
+               std::chrono::steady_clock::now() < deadline)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            result = client->Post("/tts", body.dump(), "application/json");
+        }
 
         if (result && result->status == 200)
         {

@@ -1,7 +1,8 @@
 import os
+import sys
 from io import BytesIO
 from pathlib import Path
-from threading import Lock
+from threading import Lock, Thread
 
 import soundfile as sf
 from flask import Flask, jsonify, request, send_file
@@ -11,9 +12,15 @@ class TTS_Server:
     app = Flask(__name__)
     model = None
     playback_lock = Lock()
+    model_lock = Lock()
 
     @staticmethod
     def get_model():
+        with TTS_Server.model_lock:
+            return TTS_Server.load_model()
+
+    @staticmethod
+    def load_model():
         if TTS_Server.model is None:
             import torch
             from qwen_tts import Qwen3TTSModel
@@ -29,7 +36,13 @@ class TTS_Server:
                     torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
                 )
 
-            MODEL_PATH = Path(__file__).resolve().parent / "models" / "qwen3-tts-0.6b"
+            service_dir = Path(__file__).resolve().parent
+            if getattr(sys, "frozen", False):
+                # dist/tts_server/tts_server.exe: os pesos ficam fora do pacote.
+                service_dir = Path(sys.executable).resolve().parents[2]
+            MODEL_PATH = Path(os.environ.get(
+                "TTS_MODEL_PATH", str(service_dir / "models" / "qwen3-tts-0.6b")
+            ))
 
             if not MODEL_PATH.is_dir() or not (MODEL_PATH / "config.json").is_file():
                 raise FileNotFoundError(
@@ -105,4 +118,5 @@ class TTS_Server:
 app = TTS_Server.app
 
 if __name__ == "__main__":
+    Thread(target=TTS_Server.get_model, daemon=True).start()
     app.run(host="127.0.0.1", port=5001, debug=False, use_reloader=False)

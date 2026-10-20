@@ -1,4 +1,5 @@
 #include "historyManager.h"
+#include "../internal_tools/internalTools.h"
 
 void HistoryManager::createHistory(ModelRole role, bool thinking)
 {
@@ -42,7 +43,7 @@ void HistoryManager::compressor()
         history.begin() + 1,
         history.end());
 
-    ToolResult summary = tools.executeSystemTool(
+    auto summary = tools.executeSystemTool(
         "compressor",
         Ollama::json(messages).dump());
 

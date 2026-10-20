@@ -76,6 +76,9 @@ std::pair<bool, std::string> Router::routeDecide(const std::string &prompt)
         agent.audio = !agent.audio;
 
         texto.erase(0, 6);
+
+        if (texto.empty())
+            return {false, ""};
     }
 
     return {false, texto};
@@ -116,14 +119,14 @@ void Router::decideThink(const std::string &prompt)
 // ==============================================================
 // Rota de orquestracao
 // ==============================================================
-std::tuple<ModelRole, bool, bool> Router::route(
+std::tuple<ModelRole, bool, bool, std::string> Router::route(
     const std::string &prompt)
 {
     auto [select, texto] = routeDecide(prompt);
 
     // Comando explícito tem prioridade.
     if (select)
-        return {agent.model, agent.thinking, agent.audio};
+        return {agent.model, agent.thinking, agent.audio, texto};
 
     // Classificação heurística inicial.
     applyHeuristic(texto);
@@ -135,5 +138,5 @@ std::tuple<ModelRole, bool, bool> Router::route(
         decideThink(texto);
     }
 
-    return {agent.model, agent.thinking, agent.audio};
+    return {agent.model, agent.thinking, agent.audio, texto};
 }
