@@ -1,8 +1,8 @@
 #ifndef CHAT_H
 #define CHAT_H
 
-#include "../src/agent/orchestrator/agentOrchestrator.h"
-#include "../src/terminal/terminal.h"
+#include "src/agent/orchestrator/agentOrchestrator.h"
+#include "src/terminal/terminal.h"
 
 class Chat
 {

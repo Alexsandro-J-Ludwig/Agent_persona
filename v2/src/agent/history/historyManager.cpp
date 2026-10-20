@@ -21,8 +21,43 @@ void HistoryManager::addHistory(
     const std::string &role,
     const std::string &message)
 {
+    if (properties.max_msg == 0)
+        return;
+
+    if (history.size() >= properties.max_msg)
+    {
+        compressor();
+    }
+
     history.push_back({{"role", role},
                        {"content", message}});
+}
+
+// ===========================================================
+// Comprensao de contexto
+// ===========================================================
+void HistoryManager::compressor()
+{
+    std::vector<Ollama::json> messages(
+        history.begin() + 1,
+        history.end());
+
+    ToolResult summary = tools.executeSystemTool(
+        "compressor",
+        Ollama::json(messages).dump());
+
+    if (!summary.success)
+        throw std::runtime_error("Falha ao comprimir histórico: " + summary.error);
+
+    if (summary.output.find_first_not_of(" \t\r\n") == std::string::npos)
+        throw std::runtime_error("O compressor retornou um resumo vazio.");
+
+    history.erase(
+        history.begin() + 1,
+        history.end());
+
+    history.push_back({{"role", "system"},
+                       {"content", summary.output}});
 }
 
 const std::vector<Ollama::json> &

@@ -1,8 +1,9 @@
 #include "router.h"
-#include <algorithm>
-#include <cctype>
 
-void Router::forceThinking(const std::string &prompt)
+// =========================================================
+// Forca o pensmento a partir de mensagens contidas no texto
+// =========================================================
+void Router::applyHeuristic(const std::string &prompt)
 {
     agent.model = ModelRole::Agent;
     agent.thinking = false;
@@ -45,9 +46,94 @@ void Router::forceThinking(const std::string &prompt)
     }
 }
 
-std::tuple<ModelRole, bool> Router::route(const std::string &prompt)
+// =============================================================
+// Decide a rota de pensamento a partir do usuario
+// =============================================================
+std::pair<bool, std::string> Router::routeDecide(const std::string &prompt)
 {
-    forceThinking(prompt);
+    std::string texto = prompt;
 
-    return {agent.model, agent.thinking};
-};
+    if (prompt.find("/fast") != std::string::npos)
+    {
+        agent.model = ModelRole::Agent;
+        agent.thinking = false;
+
+        texto.erase(0, 5);
+
+        return {true, texto};
+    }
+    else if (prompt.find("/think") != std::string::npos)
+    {
+        agent.model = ModelRole::Think;
+        agent.thinking = true;
+
+        texto.erase(0, 6);
+
+        return {true, texto};
+    }
+    else if (prompt.find("/audio") != std::string::npos)
+    {
+        agent.audio = !agent.audio;
+
+        texto.erase(0, 6);
+    }
+
+    return {false, texto};
+}
+
+void Router::decideThink(const std::string &prompt)
+{
+    ToolResult result = tool.executeSystemTool(
+        "decide_think",
+        prompt);
+
+    if (!result.success)
+        return; // Preserva a decisão heurística.
+
+    try
+    {
+        json decision = json::parse(result.output);
+
+        std::string modelName =
+            decision["model"].get<std::string>();
+
+        if (modelName != "Agent" && modelName != "Think")
+            return;
+
+        agent.model =
+            modelName == "Think"
+                ? ModelRole::Think
+                : ModelRole::Agent;
+
+        agent.thinking =
+            decision["thinking"].get<bool>();
+    }
+    catch (const json::exception &)
+    {
+        // Mantém a decisão heurística.
+    }
+}
+// ==============================================================
+// Rota de orquestracao
+// ==============================================================
+std::tuple<ModelRole, bool, bool> Router::route(
+    const std::string &prompt)
+{
+    auto [select, texto] = routeDecide(prompt);
+
+    // Comando explícito tem prioridade.
+    if (select)
+        return {agent.model, agent.thinking, agent.audio};
+
+    // Classificação heurística inicial.
+    applyHeuristic(texto);
+
+    // Classificação semântica quando a heurística
+    // não selecionou o modelo Think.
+    if (agent.model == ModelRole::Agent)
+    {
+        decideThink(texto);
+    }
+
+    return {agent.model, agent.thinking, agent.audio};
+}

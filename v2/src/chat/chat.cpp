@@ -15,36 +15,66 @@ void Chat::sendMessage(const std::string &prompt)
 
     ai_thread = std::thread([this, prompt, id]()
                             {
-        try
+    bool timerStarted = false;
+
+    try
+    {
+        // Faz o orquestrador selecionar o modelo e retonar
+        auto [role, thinking, audio] =
+            orquestrador.selectModel(prompt);
+
+        // Envia uma mensagem de status para o usuario identificar 
+        // Se o modelo esta pensando ou nao
+        terminal.setStatus(
+            std::string(
+                role == ModelRole::Think ? "Think" : "Agent"
+            ) +
+            (thinking ? " | Thinking ON" : " | Thinking OFF")
+        );
+
+        // Inicia o cronometro de contagem de tempo de resposta do agente
+        terminal.startThinking();
+        timerStarted = true;
+
+        // Realiza o chamado principal do orquestrador
+        orquestrador.run(
+            prompt,
+            role,
+            thinking,
+            audio,
+            [this, id](const std::string& chunk)
+            {
+                terminal.appendChunk(id, chunk);
+            }
+        );
+
+        const double elapsed = terminal.stopThinking();
+        timerStarted = false;
+
+        terminal.setStatus("");
+    }
+    catch (const std::exception& e)
+    {
+        if (timerStarted)
         {
-            auto [role, thinking] = orquestrador.selectModel(prompt);
-
-            terminal.setStatus(
-                std::string(role == ModelRole::Think ? "Think" : "Agent") +
-                (thinking ? " | Thinking ON" : " | Thinking OFF")
+            const double elapsed = terminal.stopThinking();
+            terminal.appendChunk(
+                id,
+                "\n\n[Erro: " + std::string(e.what()) + "]"
             );
-
-            orquestrador.run(
-                prompt,
-                role,
-                thinking,
-                [this, id](const std::string& chunk)
-                {
-                    terminal.appendChunk(id, chunk);
-                }
-            );
-
-            terminal.setStatus("");
         }
-        catch (const std::exception& e)
+        else
         {
             terminal.appendChunk(
                 id,
-                std::string("\n[Erro: ") + e.what() + "]"
+                "\n\n[Erro: " + std::string(e.what()) + "]"
             );
         }
 
-        processing = false; });
+        terminal.setStatus("Erro na geração");
+    }
+
+    processing = false; });
 }
 
 void Chat::run()

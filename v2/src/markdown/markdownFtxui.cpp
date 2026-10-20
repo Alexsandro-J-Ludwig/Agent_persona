@@ -131,13 +131,47 @@ Element inlineContent(const MarkdownNode& node) {
 
 Element renderBlock(const MarkdownNode& node);
 
+bool isInline(const MarkdownNode& node) {
+    switch (node.type) {
+        case MarkdownType::Text:
+        case MarkdownType::Emphasis:
+        case MarkdownType::Strong:
+        case MarkdownType::Strike:
+        case MarkdownType::InlineCode:
+        case MarkdownType::Link:
+        case MarkdownType::Image:
+        case MarkdownType::HardBreak:
+        case MarkdownType::SoftBreak:
+        case MarkdownType::Math:
+            return true;
+        default:
+            return false;
+    }
+}
+
 Element childrenVertical(const MarkdownNode& node, bool addSpacing) {
     Elements rows;
+    MarkdownNode paragraph{MarkdownType::Paragraph};
+    const auto appendBlock = [&](Element block) {
+        if (addSpacing && !rows.empty()) rows.push_back(text(""));
+        rows.push_back(std::move(block));
+    };
+    const auto flushInline = [&]() {
+        if (paragraph.children.empty()) return;
+        appendBlock(inlineContent(paragraph));
+        paragraph.children.clear();
+    };
     for (const auto& child : node.children) {
-        rows.push_back(renderBlock(child));
-        if (addSpacing) rows.push_back(text(""));
+        // MD4C omite os parágrafos de listas compactas. Seus spans
+        // continuam na mesma linha, até surgir um bloco (ex.: sublista).
+        if (isInline(child)) {
+            paragraph.children.push_back(child);
+        } else {
+            flushInline();
+            appendBlock(renderBlock(child));
+        }
     }
-    if (addSpacing && !rows.empty()) rows.pop_back();
+    flushInline();
     return vbox(std::move(rows)) | flex;
 }
 

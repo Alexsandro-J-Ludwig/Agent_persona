@@ -8,6 +8,78 @@
 // MENSAGENS
 // ============================================================
 
+Component TerminalDisplay::initDisplay()
+{
+    return Renderer([]
+                    { return hbox({text("Bem-vindo!") | color(Color::Red),
+                                   text(" Envie: ") | color(Color::White),
+                                   text("/help") | color(Color::Magenta),
+                                   text(" - Para exibir todos os comandos") | color(Color::White)}); });
+}
+
+Component TerminalDisplay::thinkingStatus()
+{
+    return Renderer([this]
+                    {
+        if (!isGenerating.load())
+            return text("");
+
+        const auto elapsed =
+            std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::steady_clock::now() - generationStart
+            ).count();
+
+        const auto minutes = elapsed / 60;
+        const auto seconds = elapsed % 60;
+
+        std::string time =
+            (minutes < 10 ? "0" : "") +
+            std::to_string(minutes) + ":" +
+            (seconds < 10 ? "0" : "") +
+            std::to_string(seconds);
+
+        return hbox({
+            text("Pensando... ") | color(Color::Yellow2),
+            text(time) | color(Color::White)
+        }); });
+}
+
+void TerminalDisplay::startThinking()
+{
+    generationStart = std::chrono::steady_clock::now();
+    isGenerating.store(true);
+
+    timerThread = std::jthread([this](std::stop_token stop)
+                               {
+        while (!stop.stop_requested() && isGenerating.load()) {
+            std::this_thread::sleep_for(
+                std::chrono::milliseconds(200)
+            );
+
+            if (!stop.stop_requested() && isGenerating.load())
+                screen.PostEvent(Event::Custom);
+        } });
+
+    screen.PostEvent(Event::Custom);
+}
+
+double TerminalDisplay::stopThinking()
+{
+    isGenerating.store(false);
+
+    if (timerThread.joinable())
+    {
+        timerThread.request_stop();
+        timerThread.join();
+    }
+
+    screen.PostEvent(Event::Custom);
+
+    return std::chrono::duration<double>(
+               std::chrono::steady_clock::now() - generationStart)
+        .count();
+}
+
 MessageId TerminalDisplay::addMessage(
     const std::string &role,
     const std::string &message)
@@ -109,7 +181,8 @@ Element TerminalDisplay::commandView()
     auto table = Table({{"Commands", "Function"},
                         {"/fast", "Force response speed"},
                         {"/think", "Force thinking mode"},
-                        {"/models", "Exibe os modelos atuais"}});
+                        {"/models", "Exibe os modelos atuais"},
+                        {"/audio", "Ativa ou desativa o modo de audio"}});
 
     table.SelectAll().Separator(LIGHT);
 
@@ -181,6 +254,7 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
     | vscroll_indicator
     | frame
     | flex; });
+
     // --------------------------------------------------------
     // Entrada
     // --------------------------------------------------------
@@ -322,6 +396,9 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
 
         return false; });
 
+    auto init = initDisplay();
+    auto ts = thinkingStatus();
+
     // --------------------------------------------------------
     // Renderização final
     // --------------------------------------------------------
@@ -331,6 +408,10 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
     Elements elements;
 
     // Conversa ocupa o espaço disponível.
+    elements.push_back(
+        init -> Render() | flex
+    );
+
     elements.push_back(
         chatScroll->Render() | flex
     );
@@ -342,6 +423,10 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
     // Entrada fixa.
     elements.push_back(
         input->Render()
+    );
+
+    elements.push_back(
+        ts->Render()
     );
 
     // Barra de status fixa.

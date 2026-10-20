@@ -19,6 +19,7 @@ enum class ModelBackend
 {
     Ollama,
     TTSService,
+    AudioService
 };
 
 enum class ModelRole : std::size_t
@@ -26,6 +27,7 @@ enum class ModelRole : std::size_t
     Agent,
     Think,
     TTS,
+    Audio,
 
     Count
 };
@@ -38,6 +40,8 @@ struct Model
     ModelBackend backend;
 
     std::size_t num_ctx;
+    std::size_t num_predict;
+    
     int keep_alive;
 };
 

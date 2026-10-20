@@ -1,4 +1,3 @@
-
 cmake_minimum_required(VERSION 3.25)
 
 project(
@@ -84,6 +83,23 @@ FetchContent_MakeAvailable(md4c)
 
 find_package(OpenSSL REQUIRED)
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PORTAUDIO REQUIRED IMPORTED_TARGET portaudio-2.0)
+find_package(SndFile CONFIG REQUIRED)
+
+# Normaliza o prefixo MSYS2 (bin/../include) para não duplicar
+# o diretório implícito do compilador e quebrar include_next.
+foreach(AUDIO_DEPENDENCY IN ITEMS SndFile::sndfile PkgConfig::PORTAUDIO)
+    get_target_property(AUDIO_INCLUDE_DIRS ${AUDIO_DEPENDENCY} INTERFACE_INCLUDE_DIRECTORIES)
+    set(AUDIO_NORMALIZED_INCLUDE_DIRS "")
+    foreach(AUDIO_INCLUDE_DIR IN LISTS AUDIO_INCLUDE_DIRS)
+        cmake_path(NORMAL_PATH AUDIO_INCLUDE_DIR OUTPUT_VARIABLE AUDIO_NORMALIZED_INCLUDE_DIR)
+        list(APPEND AUDIO_NORMALIZED_INCLUDE_DIRS "${AUDIO_NORMALIZED_INCLUDE_DIR}")
+    endforeach()
+    set_property(TARGET ${AUDIO_DEPENDENCY} PROPERTY
+        INTERFACE_INCLUDE_DIRECTORIES "${AUDIO_NORMALIZED_INCLUDE_DIRS}")
+endforeach()
+
 # ============================================================
 # EXECUTÁVEL
 # ============================================================
@@ -115,6 +131,14 @@ add_executable(agent
     # Markdown
     src/markdown/markdownRenderer.cpp
     src/markdown/markdownFtxui.cpp
+
+    # Internal Tools
+    src/agent/internal_tools/internalTools.cpp
+
+    # Audio
+    src/audio/audioPlayer.cpp
+
+    src/services/ttsService/ttsService.cpp
 )
 
 # ============================================================
@@ -142,7 +166,7 @@ target_compile_definitions(
 )
 
 # ============================================================
-# BIBLIOTECAS
+# BIBLIOTECAS (Geral)
 # ============================================================
 
 target_link_libraries(
@@ -162,13 +186,12 @@ target_link_libraries(
         OpenSSL::SSL
         OpenSSL::Crypto
 
-        # Bibliotecas Windows
-        ws2_32
-        crypt32
+        PkgConfig::PORTAUDIO
+        SndFile::sndfile
 )
 
 # ============================================================
-# WINDOWS
+# WINDOWS (Configurações e Bibliotecas exclusivas)
 # ============================================================
 
 if(WIN32)
@@ -177,6 +200,13 @@ if(WIN32)
         PRIVATE
             WIN32_LEAN_AND_MEAN
             NOMINMAX
+    )
+    # Linka as libs do Windows apenas quando compilado nele
+    target_link_libraries(
+        agent
+        PRIVATE
+            ws2_32
+            crypt32
     )
 endif()
 
