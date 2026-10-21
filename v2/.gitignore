@@ -1,0 +1,2 @@
+*.gguf
+src/agent/internal_tools/audio/models/

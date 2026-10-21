@@ -7,9 +7,11 @@ Orquestrador::Orquestrador()
              {
                  const auto result = tools.executeSystemTool("audioPlayer", phrase);
                  if (!result.success)
-                     throw std::runtime_error(result.error); })
+                     throw std::runtime_error(result.error);
+             })
 {
 }
+
 
 std::tuple<ModelRole, bool, bool, std::string> Orquestrador::selectModel(
     const std::string &prompt)

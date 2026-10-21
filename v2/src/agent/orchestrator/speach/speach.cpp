@@ -17,6 +17,7 @@ Speach::~Speach()
         std::lock_guard lock(mtx);
         stopping = true;
     }
+    
     ready.notify_one();
     if (worker.joinable())
         worker.join();
@@ -66,9 +67,12 @@ void Speach::consume()
             std::unique_lock lock(mtx);
             ready.wait(lock, [this]
                        { return stopping || !phrases.empty(); });
+
             if (stopping && phrases.empty())
                 return;
+
             phrase = std::move(phrases.front());
+
             phrases.pop_front();
             active = true;
         }

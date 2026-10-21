@@ -135,11 +135,6 @@ add_executable(agent
 
     # Internal Tools
     src/agent/internal_tools/internalTools.cpp
-
-    # Audio
-    src/audio/audioPlayer.cpp
-
-    src/services/ttsService/ttsService.cpp
 )
 
 # ============================================================
