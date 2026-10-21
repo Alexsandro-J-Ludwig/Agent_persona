@@ -17,7 +17,7 @@ Speach::~Speach()
         std::lock_guard lock(mtx);
         stopping = true;
     }
-    
+
     ready.notify_one();
     if (worker.joinable())
         worker.join();

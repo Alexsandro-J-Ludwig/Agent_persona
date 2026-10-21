@@ -135,6 +135,9 @@ add_executable(agent
 
     # Internal Tools
     src/agent/internal_tools/internalTools.cpp
+
+    # Internal Tools audio
+    src/agent/internal_tools/audio/ttsService.cpp
 )
 
 # ============================================================
@@ -207,41 +210,30 @@ if(WIN32)
 endif()
 
 # ============================================================
-# TESTES OPCIONAIS DO MARKDOWN
+# QWEN3-TTS
 # ============================================================
 
-option(BUILD_SPEACH_TESTS "Compilar testes da fila de fala" OFF)
+set(TTS_DIR "${CMAKE_SOURCE_DIR}/libs/qwen3-tts/tts-package")
 
-if(BUILD_SPEACH_TESTS)
-    find_package(Threads REQUIRED)
-    enable_testing()
-    add_executable(speach_test
-        src/agent/orchestrator/speach/speach.cpp
-        tests/testSpeach.cpp
-    )
-    target_include_directories(speach_test PRIVATE ${CMAKE_SOURCE_DIR})
-    target_link_libraries(speach_test PRIVATE Threads::Threads)
-    add_test(NAME speach_queue COMMAND speach_test)
-endif()
+add_library(qwen3tts SHARED IMPORTED)
 
-option(BUILD_MARKDOWN_TESTS "Compilar testes do parser Markdown" OFF)
+set_target_properties(qwen3tts PROPERTIES
+    IMPORTED_IMPLIB "${TTS_DIR}/lib/libqwen3tts.dll.a"
+    IMPORTED_LOCATION "${TTS_DIR}/bin/libqwen3tts.dll"
+)
 
-if(BUILD_MARKDOWN_TESTS)
-    add_executable(markdown_parser_test
-        src/markdown/markdownRenderer.cpp
-        tests/testMarkdown.cpp
-    )
+target_include_directories(agent PRIVATE
+    "${TTS_DIR}/include"
+)
 
-    target_include_directories(
-        markdown_parser_test
-        PRIVATE
-            ${CMAKE_SOURCE_DIR}/src
-            ${md4c_SOURCE_DIR}/src
-    )
+target_link_libraries(agent PRIVATE
+    qwen3tts
+)
 
-    target_link_libraries(
-        markdown_parser_test
-        PRIVATE
-            md4c
-    )
-endif()
+# Copiar a DLL para a pasta do executável
+add_custom_command(
+    TARGET agent POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${TTS_DIR}/bin/libqwen3tts.dll"
+        "$<TARGET_FILE_DIR:agent>"
+)

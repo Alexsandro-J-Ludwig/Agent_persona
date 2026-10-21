@@ -18,8 +18,7 @@ melhorar a organização e arquitetura do código, como é possível ver nas pas
 enum class ModelBackend
 {
     Ollama,
-    TTSService,
-    AudioService
+    TTSService
 };
 
 enum class ModelRole : std::size_t
@@ -27,9 +26,18 @@ enum class ModelRole : std::size_t
     Agent,
     Think,
     TTS,
-    Audio,
 
     Count
+};
+
+struct TTSConfig
+{
+    const char *language = "portuguese";
+    const char *speaker = "";
+    const char *instruct = "";
+
+    int threads;
+    int max_audio_tokens;
 };
 
 struct Model
@@ -41,8 +49,10 @@ struct Model
 
     std::size_t num_ctx;
     std::size_t num_predict;
-    
+
     int keep_alive;
+
+    TTSConfig tts();
 };
 
 constexpr std::size_t MODEL_COUNT =

@@ -7,11 +7,9 @@ Orquestrador::Orquestrador()
              {
                  const auto result = tools.executeSystemTool("audioPlayer", phrase);
                  if (!result.success)
-                     throw std::runtime_error(result.error);
-             })
+                     throw std::runtime_error(result.error); })
 {
 }
-
 
 std::tuple<ModelRole, bool, bool, std::string> Orquestrador::selectModel(
     const std::string &prompt)
@@ -48,11 +46,11 @@ std::string Orquestrador::run(
         manager.getHistory(),
         [&](const std::string &chunk)
         {
-            onChunk(chunk);         // Atualiza o terminal.
-            pendingSpeech += chunk; // Acumula enquanto o modelo gera.
+            onChunk(chunk); // Atualiza o terminal.
 
             if (audio)
             {
+                pendingSpeech += chunk; // Acumula enquanto o modelo gera.
 
                 if (pendingSpeech.find(".") != std::string::npos ||
                     pendingSpeech.find("!") != std::string::npos ||
