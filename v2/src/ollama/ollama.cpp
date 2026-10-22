@@ -97,7 +97,8 @@ ChatResult Ollama::chatStream(
     const Model &model,
     const std::vector<json> &messages,
     StreamCallback callback,
-    bool thinking)
+    bool thinking,
+    const json &tools)
 {
     json body = {
         {"model", model.name},
@@ -107,12 +108,15 @@ ChatResult Ollama::chatStream(
         {"think", thinking},
         {"options", {{"num_ctx", model.num_ctx}, {"num_predict", model.num_predict}}}};
 
+    if (!tools.empty())
+        body["tools"] = tools;
+
     std::string buffer;
     std::string responseText;
     json toolCalls = json::array();
 
     auto receiver =
-        [&buffer, &responseText, callback](const char *data, std::size_t lenght)
+        [&buffer, &responseText, &toolCalls, callback](const char *data, std::size_t lenght)
     {
         buffer.append(data, lenght);
 
@@ -143,13 +147,6 @@ ChatResult Ollama::chatStream(
                 responseText += content;
                 callback(content);
             }
-
-            std::string content =
-                chunk["message"].value("content", "");
-
-            responseText += content;
-
-            callback(content);
         }
 
         return true;
@@ -184,20 +181,27 @@ ChatResult Ollama::chatStream(
             std::to_string(response->status));
     }
 
-    if (!buffer.empty())
+    auto processLine = [&](const std::string &line)
     {
-        json chunk = json::parse(buffer);
+        if (line.empty())
+            return;
+        json chunk = json::parse(line);
+        if (!chunk.contains("message"))
+            return;
 
-        if (chunk.contains("message"))
+        const auto &message = chunk.at("message");
+
+        if (message.contains("tool_calls") && message.at("tool_calls").is_array())
+            for (const auto &call : message.at("tool_calls"))
+                toolCalls.push_back(call);
+
+        const std::string content = message.value("content", "");
+        if (!content.empty())
         {
-            std::string content =
-                chunk["message"].value("content", "");
-
             responseText += content;
+            callback(content);
         }
-
-        callback(chunk);
-    }
+    };
 
     return {responseText, toolCalls};
 }

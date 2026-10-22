@@ -41,7 +41,9 @@ public:
         const Model &model,
         const std::vector<json> &history,
         StreamCallback callback,
-        bool thinking = false);
+        bool thinking = false,
+        const json &tools = json::array()
+    );
 
 private:
     std::unique_ptr<httplib::Client> client;

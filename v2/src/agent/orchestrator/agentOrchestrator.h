@@ -8,6 +8,9 @@
 #include "src/agent/internal_tools/internalTools.h"
 #include <tuple>
 #include "src/agent/orchestrator/speach/speach.h"
+#include "src/agent/tasks/taskManager.hpp"
+
+using ToolCallback = std::function<void(const std::string &, const ToolResult &)>;
 
 class Orquestrador
 {
@@ -17,6 +20,7 @@ private:
     Router router;
     HistoryManager manager;
     Speach speech;
+    TaskManager taskManager{tools};
 
 public:
     Orquestrador();
@@ -26,7 +30,9 @@ public:
         ModelRole role,
         bool thinking,
         bool audio,
-        Ollama::StreamCallback onChunk);
+        Ollama::StreamCallback onChunk,
+        ToolCallback onTool = {}
+    );
 
     std::tuple<ModelRole, bool, bool, std::string> selectModel(
         const std::string &prompt);
