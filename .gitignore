@@ -102,3 +102,5 @@ desktop.ini
 
 # Pesos e cache locais do serviço de voz
 /v2/src/services/tts/models/
+*.gguf
+/v2/src/agent/internal_tools/audio/models/
