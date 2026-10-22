@@ -46,13 +46,16 @@ public:
         const std::string &chunk);
 
     void startThinking();
+    void setAwaitToken();
     double stopThinking();
 
     Element commandView();
+    Element spinnerElement();
 
 private:
     std::string prompt;
     std::vector<ChatMessage> messages;
+    std::atomic<int> spinnerFrame{0};
 
     std::mutex chat_mutex;
     std::string statusMessage;
@@ -63,6 +66,7 @@ private:
 
     float scrollPosition = 1.0f;
     bool showCommands = false;
+    bool awaitToken = false;
     std::atomic<bool> audioEnabled{false};
 
     MessageId nextId = 0;

@@ -27,6 +27,9 @@ public:
 
 private:
     void consume();
+    bool insideCodeBlock = false;
+
+    std::string audioCleaner(const std::string &text);
 
     Speaker speaker;
     mutable std::mutex mtx;

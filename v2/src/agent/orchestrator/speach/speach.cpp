@@ -23,6 +23,9 @@ Speach::~Speach()
         worker.join();
 }
 
+// =================================================
+// Adiciona os itens a fila
+// =================================================
 void Speach::enqueue(std::string phrase)
 {
     if (phrase.find_first_not_of(" \t\r\n") == std::string::npos)
@@ -44,6 +47,9 @@ void Speach::wait()
               { return phrases.empty() && !active; });
 }
 
+// ===================================================
+// Cancela a pendencia de audio
+// ===================================================
 void Speach::cancelPending()
 {
     std::lock_guard lock(mtx);
@@ -52,12 +58,70 @@ void Speach::cancelPending()
         idle.notify_all();
 }
 
+// ===================================================
+// Captura o erro
+// ===================================================
 std::string Speach::lastError() const
 {
     std::lock_guard lock(mtx);
     return error;
 }
 
+// ===================================================
+// Limpa as tags markdown do texto
+// ===================================================
+std::string Speach::audioCleaner(const std::string &text)
+{
+    std::string result;
+    result.reserve(text.size());
+
+    size_t i = 0;
+
+    while (i < text.size())
+    {
+        // Detecta início/fim de bloco Markdown
+        if (text.compare(i, 3, "```") == 0)
+        {
+            insideCodeBlock = !insideCodeBlock;
+            i += 3;
+            continue;
+        }
+
+        // Ignora tudo dentro do bloco
+        if (insideCodeBlock)
+        {
+            ++i;
+            continue;
+        }
+
+        // Remove marcadores de formatação
+        if (text.compare(i, 2, "**") == 0 ||
+            text.compare(i, 2, "__") == 0 ||
+            text.compare(i, 2, "~~") == 0)
+        {
+            i += 2;
+            continue;
+        }
+
+        // Remove marcadores simples
+        if (text[i] == '*' ||
+            text[i] == '`' ||
+            text[i] == '#')
+        {
+            ++i;
+            continue;
+        }
+
+        result += text[i];
+        ++i;
+    }
+
+    return result;
+}
+
+// ====================================================
+// Consume os itens da fila
+// ====================================================
 void Speach::consume()
 {
     while (true)

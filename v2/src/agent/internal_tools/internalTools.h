@@ -33,7 +33,7 @@ class InternalTools
 public:
     using json = nlohmann::json;
 
-    json getSchema() const;
+    InternalTools::json getSchema() const;
 
     ToolResult executeModelTool(
         std::string_view name,
@@ -63,6 +63,8 @@ private:
         const std::string &arguments);
 
     ToolResult audioPlayer(const std::string &response);
+
+    ToolResult calculator(const std::string &arguments);
 };
 
 #endif

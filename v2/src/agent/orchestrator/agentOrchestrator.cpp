@@ -44,39 +44,47 @@ std::string Orquestrador::run(
 
     std::string pendingSpeech;
 
-    std::string response = ollama.chatStream(
-        model,
-        manager.getHistory(),
-        [&](const std::string &chunk)
-        {
-            onChunk(chunk); // Atualiza o terminal.
-
-            if (audio)
+    while (true)
+    {
+        ChatResult response = ollama.chatStream(
+            model,
+            manager.getHistory(),
+            [&](const std::string &chunk)
             {
-                pendingSpeech += chunk;
+                onChunk(chunk); // Atualiza o terminal.
 
-                bool hasEndPunct = (pendingSpeech.find('.') != std::string::npos ||
-                                    pendingSpeech.find('!') != std::string::npos ||
-                                    pendingSpeech.find('?') != std::string::npos ||
-                                    pendingSpeech.find('\n') != std::string::npos ||
-                                    pendingSpeech.find(", ") != std::string::npos);
-
-                // Se a frase já passou de 45 caracteres e tem uma vírgula ou ':', já envia pro TTS!
-                bool hasLongClause = (pendingSpeech.size() >= 45 &&
-                                      (pendingSpeech.find(',') != std::string::npos ||
-                                       pendingSpeech.find(':') != std::string::npos ||
-                                       pendingSpeech.find(';') != std::string::npos));
-
-                if (hasEndPunct || hasLongClause)
+                if (audio)
                 {
-                    if (pendingSpeech.find_first_not_of(" \t\r\n") != std::string::npos)
-                        speech.enqueue(pendingSpeech);
-                    pendingSpeech.clear();
-                }
-            }
-        },
-        thinking);
+                    pendingSpeech += chunk;
 
+                    bool hasEndPunct = (pendingSpeech.find('.') != std::string::npos ||
+                                        pendingSpeech.find('!') != std::string::npos ||
+                                        pendingSpeech.find('?') != std::string::npos ||
+                                        pendingSpeech.find('\n') != std::string::npos ||
+                                        pendingSpeech.find(", ") != std::string::npos);
+
+                    // Se a frase já passou de 45 caracteres e tem uma vírgula ou ':', já envia pro TTS!
+                    bool hasLongClause = (pendingSpeech.size() >= 45 &&
+                                          (pendingSpeech.find(',') != std::string::npos ||
+                                           pendingSpeech.find(':') != std::string::npos ||
+                                           pendingSpeech.find(';') != std::string::npos));
+
+                    if (hasEndPunct || hasLongClause)
+                    {
+                        if (pendingSpeech.find_first_not_of(" \t\r\n") != std::string::npos)
+                            speech.enqueue(pendingSpeech);
+                        pendingSpeech.clear();
+                    }
+                }
+            },
+            thinking);
+
+        manager.addHistory("assistant", response);
+
+        if (!response.toolCalls.empty())
+        {
+                }
+    }
     if (audio && !pendingSpeech.empty())
 
         speech.enqueue(pendingSpeech);
