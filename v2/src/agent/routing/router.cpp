@@ -1,5 +1,10 @@
 #include "router.h"
 
+Router::Router(InternalTools& tool)
+    : tool(tool)
+{
+}
+
 // =========================================================
 // Forca o pensmento a partir de mensagens contidas no texto
 // =========================================================

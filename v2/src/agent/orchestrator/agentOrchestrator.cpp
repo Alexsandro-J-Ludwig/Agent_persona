@@ -2,12 +2,15 @@
 #include <stdexcept>
 
 Orquestrador::Orquestrador()
-    : manager(tools),
+    : router(tools),
+      manager(tools),
       speech([this](const std::string &phrase)
              {
-                 const auto result = tools.executeSystemTool("audioPlayer", phrase);
-                 if (!result.success)
-                     throw std::runtime_error(result.error); })
+          const auto result =
+              tools.executeSystemTool("audioPlayer", phrase);
+
+          if (!result.success)
+              throw std::runtime_error(result.error); })
 {
 }
 
@@ -50,13 +53,24 @@ std::string Orquestrador::run(
 
             if (audio)
             {
-                pendingSpeech += chunk; // Acumula enquanto o modelo gera.
+                pendingSpeech += chunk;
 
-                if (pendingSpeech.find(".") != std::string::npos ||
-                    pendingSpeech.find("!") != std::string::npos ||
-                    pendingSpeech.find("?") != std::string::npos)
+                bool hasEndPunct = (pendingSpeech.find('.') != std::string::npos ||
+                                    pendingSpeech.find('!') != std::string::npos ||
+                                    pendingSpeech.find('?') != std::string::npos ||
+                                    pendingSpeech.find('\n') != std::string::npos ||
+                                    pendingSpeech.find(", ") != std::string::npos);
+
+                // Se a frase já passou de 45 caracteres e tem uma vírgula ou ':', já envia pro TTS!
+                bool hasLongClause = (pendingSpeech.size() >= 45 &&
+                                      (pendingSpeech.find(',') != std::string::npos ||
+                                       pendingSpeech.find(':') != std::string::npos ||
+                                       pendingSpeech.find(';') != std::string::npos));
+
+                if (hasEndPunct || hasLongClause)
                 {
-                    speech.enqueue(pendingSpeech);
+                    if (pendingSpeech.find_first_not_of(" \t\r\n") != std::string::npos)
+                        speech.enqueue(pendingSpeech);
                     pendingSpeech.clear();
                 }
             }
@@ -64,6 +78,7 @@ std::string Orquestrador::run(
         thinking);
 
     if (audio && !pendingSpeech.empty())
+
         speech.enqueue(pendingSpeech);
 
     // Adiciona a resposta da IA no historico

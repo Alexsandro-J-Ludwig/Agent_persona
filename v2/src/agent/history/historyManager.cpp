@@ -32,8 +32,13 @@ void HistoryManager::addHistory(
 
     history.push_back({{"role", role},
                        {"content", message}});
-}
 
+    std::cerr << "\n========== LOG HISTORICO ==========\n"
+              << "[History] Role: " << role << '\n'
+              << "[History] Content: " << message << '\n'
+              << "===================================\n"
+              << std::flush;
+}
 // ===========================================================
 // Comprensao de contexto
 // ===========================================================
@@ -59,6 +64,12 @@ void HistoryManager::compressor()
 
     history.push_back({{"role", "system"},
                        {"content", summary.output}});
+
+    std::cerr << "\n========== LOG HISTORICO RESUMO ==========\n"
+              << "[History] Role: system\n"
+              << "[History] Content: " << summary.output << '\n'
+              << "============================================\n"
+              << std::flush;
 }
 
 const std::vector<Ollama::json> &

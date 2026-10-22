@@ -215,25 +215,58 @@ endif()
 
 set(TTS_DIR "${CMAKE_SOURCE_DIR}/libs/qwen3-tts/tts-package")
 
-add_library(qwen3tts SHARED IMPORTED)
-
-set_target_properties(qwen3tts PROPERTIES
-    IMPORTED_IMPLIB "${TTS_DIR}/lib/libqwen3tts.dll.a"
-    IMPORTED_LOCATION "${TTS_DIR}/bin/libqwen3tts.dll"
-)
-
 target_include_directories(agent PRIVATE
     "${TTS_DIR}/include"
 )
 
-target_link_libraries(agent PRIVATE
-    qwen3tts
-)
+if(WIN32)
+    add_library(qwen3tts SHARED IMPORTED)
 
-# Copiar a DLL para a pasta do executável
-add_custom_command(
-    TARGET agent POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${TTS_DIR}/bin/libqwen3tts.dll"
-        "$<TARGET_FILE_DIR:agent>"
-)
+    set_target_properties(qwen3tts PROPERTIES
+        IMPORTED_IMPLIB "${TTS_DIR}/lib/libqwen3tts.dll.a"
+        IMPORTED_LOCATION "${TTS_DIR}/bin/libqwen3tts.dll"
+    )
+
+    target_link_libraries(agent PRIVATE qwen3tts)
+
+    add_custom_command(
+        TARGET agent POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${TTS_DIR}/bin/libqwen3tts.dll"
+            "$<TARGET_FILE_DIR:agent>"
+    )
+
+elseif(UNIX)
+    set(TTS_LIB_DIR "${TTS_DIR}/lib")
+    set(TTS_GGML_DIR "${TTS_LIB_DIR}/ggml")
+
+    add_library(qwen3tts SHARED IMPORTED)
+
+    set_target_properties(qwen3tts PROPERTIES
+        IMPORTED_LOCATION "${TTS_LIB_DIR}/libqwen3tts.so"
+        IMPORTED_SONAME "libqwen3tts.so.0"
+        INTERFACE_INCLUDE_DIRECTORIES "${TTS_DIR}/include"
+    )
+
+    target_link_libraries(agent PRIVATE qwen3tts)
+
+    # Permite encontrar as bibliotecas GGML locais em execução.
+    set_target_properties(agent PROPERTIES
+        BUILD_RPATH "${TTS_GGML_DIR}"
+        INSTALL_RPATH "$ORIGIN/../lib/ggml"
+    )
+
+    add_custom_command(
+        TARGET agent POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${TTS_LIB_DIR}/libqwen3tts.so.0.1.0"
+            "$<TARGET_FILE_DIR:agent>/libqwen3tts.so.0.1.0"
+        COMMAND ${CMAKE_COMMAND} -E create_symlink
+            "libqwen3tts.so.0.1.0"
+            "$<TARGET_FILE_DIR:agent>/libqwen3tts.so.0"
+        COMMAND ${CMAKE_COMMAND} -E create_symlink
+            "libqwen3tts.so.0"
+            "$<TARGET_FILE_DIR:agent>/libqwen3tts.so"
+        VERBATIM
+    )
+endif()

@@ -13,8 +13,8 @@ class Orquestrador
 {
 private:
     Ollama ollama;
-    Router router;
     InternalTools tools;
+    Router router;
     HistoryManager manager;
     Speach speech;
 

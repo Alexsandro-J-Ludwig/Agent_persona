@@ -1,16 +1,20 @@
 #ifndef TTSSERVICE_H
 #define TTSSERVICE_H
 
-#include "../libs/qwen3-tts/tts-package/include/qwen3tts_c_api.h"
-
+#include <cstdio>
+#include <mutex>
 #include <string>
-#include <vector>
 
 class TTSService
 {
 private:
-    Qwen3Tts *tts = nullptr;
-    Qwen3TtsParams params{};
+    FILE *piper_stream = nullptr;
+    std::mutex stream_mutex;
+    std::string model_path;
+    int sample_rate = 22050;
+
+    bool openStream();
+    void closeStream();
 
 public:
     TTSService();
@@ -22,4 +26,4 @@ public:
     bool speak(const std::string &text);
 };
 
-#endif
+#endif // TTSSERVICE_H

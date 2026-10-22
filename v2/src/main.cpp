@@ -4,6 +4,9 @@
 
 int main()
 {
+    std::ofstream log_file("logs.log");
+    std::streambuf* old_cerr = std::cerr.rdbuf(log_file.rdbuf());
+
     Chat chat;
     chat.run();
 
