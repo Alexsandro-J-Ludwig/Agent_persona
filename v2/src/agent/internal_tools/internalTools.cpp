@@ -71,6 +71,9 @@ ToolResult InternalTools::execute(
     if (name == "audioPlayer")
         return audioPlayer(arguments);
 
+    if (name == "calculator") 
+        return calculator(arguments);
+
     return {
         false,
         "",

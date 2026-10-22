@@ -138,6 +138,9 @@ add_executable(agent
 
     # Internal Tools audio
     src/agent/internal_tools/audio/ttsService.cpp
+
+    # Task Manager
+    src/agent/tasks/taskManager.cpp
 )
 
 # ============================================================

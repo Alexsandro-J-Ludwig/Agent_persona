@@ -9,10 +9,23 @@ namespace ToolSchemas
     {
         return {
             {"type", "function"},
-            {"function", {{"name", "calculator"}, {"description", "Executa um cálculo matemático."}, {"parameters", {{"type", "object"}, {"properties", {{"expression", {{"type", "string"}}}}}, {"required", {"operation" : {
-                                                                                                                                                                                                      "type" : "string",
-                                                                                                                                                                                                      "enum" : [ "+", "-", "*", "/" ]
-                                                                                                                                                                                                  }}}}}}}};
+            {"function", {
+                {"name", "calculator"},
+                {"description", "Executa uma operação matemática."},
+                {"parameters", {
+                    {"type", "object"},
+                    {"properties", {
+                        {"a", {{"type", "number"}}},
+                        {"b", {{"type", "number"}}},
+                        {"operation", {
+                            {"type", "string"},
+                            {"enum", {"+", "-", "*", "/"}}
+                        }}
+                    }},
+                    {"required", {"a", "b", "operation"}}
+                }}
+            }}
+        };
     }
 }
 
