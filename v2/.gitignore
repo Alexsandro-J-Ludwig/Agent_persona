@@ -1,2 +1,3 @@
 *.gguf
-/v2/src/agent/internal_tools/audio/models/
+/v2/src/agent/internal_tools/audio/models/libs/piper/linux/
+libs/piper/piper-models/
