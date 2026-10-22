@@ -23,6 +23,41 @@ Speach::~Speach()
         worker.join();
 }
 
+void Speach::feed(const std::string &token)
+{
+    pendingSpeech += token;
+
+    bool hasEndPunct = (pendingSpeech.find('.') != std::string::npos ||
+                        pendingSpeech.find('!') != std::string::npos ||
+                        pendingSpeech.find('?') != std::string::npos ||
+                        pendingSpeech.find('\n') != std::string::npos ||
+                        pendingSpeech.find(", ") != std::string::npos);
+
+    // Se a frase já passou de 45 caracteres e tem uma vírgula ou ':', já envia pro TTS!
+    bool hasLongClause = (pendingSpeech.size() >= 45 &&
+                          (pendingSpeech.find(',') != std::string::npos ||
+                           pendingSpeech.find(':') != std::string::npos ||
+                           pendingSpeech.find(';') != std::string::npos));
+
+    if(hasEndPunct || hasLongClause)
+    {
+        if (pendingSpeech.find_first_not_of(" \t\r\n") != std::string::npos)
+            enqueue(pendingSpeech);
+        pendingSpeech.clear();
+    }
+
+    if (hasEndPunct || hasLongClause)
+        flush();
+}
+
+void Speach::flush()
+{
+    std::string text = audioCleaner(pendingSpeech);
+    pendingSpeech.clear();
+    if (text.find_first_not_of(" \t\r\n") != std::string::npos)
+        enqueue(std::move(text));
+}
+
 // =================================================
 // Adiciona os itens a fila
 // =================================================

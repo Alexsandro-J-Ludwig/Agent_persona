@@ -22,12 +22,15 @@ public:
     // Apenas coloca a frase na fila; não espera geração nem reprodução.
     void enqueue(std::string phrase);
     void wait();
+    void feed(const std::string &chunk);
+    void flush();
     void cancelPending();
     std::string lastError() const;
 
 private:
     void consume();
     bool insideCodeBlock = false;
+    std::string pendingSpeech;
 
     std::string audioCleaner(const std::string &text);
 
