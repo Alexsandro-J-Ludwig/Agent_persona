@@ -119,6 +119,7 @@ add_executable(agent
 
     # Agente
     src/agent/orchestrator/agentOrchestrator.cpp
+    src/agent/orchestrator/speach/speach.cpp
     src/agent/routing/router.cpp
     src/agent/history/historyManager.cpp
 
@@ -135,10 +136,8 @@ add_executable(agent
     # Internal Tools
     src/agent/internal_tools/internalTools.cpp
 
-    # Audio
-    src/audio/audioPlayer.cpp
-
-    src/services/ttsService/ttsService.cpp
+    # Internal Tools audio
+    src/agent/internal_tools/audio/ttsService.cpp
 )
 
 # ============================================================
@@ -211,27 +210,63 @@ if(WIN32)
 endif()
 
 # ============================================================
-# TESTES OPCIONAIS DO MARKDOWN
+# QWEN3-TTS
 # ============================================================
 
-option(BUILD_MARKDOWN_TESTS "Compilar testes do parser Markdown" OFF)
+set(TTS_DIR "${CMAKE_SOURCE_DIR}/libs/qwen3-tts/tts-package")
 
-if(BUILD_MARKDOWN_TESTS)
-    add_executable(markdown_parser_test
-        src/markdown/markdownRenderer.cpp
-        tests/testMarkdown.cpp
+target_include_directories(agent PRIVATE
+    "${TTS_DIR}/include"
+)
+
+if(WIN32)
+    add_library(qwen3tts SHARED IMPORTED)
+
+    set_target_properties(qwen3tts PROPERTIES
+        IMPORTED_IMPLIB "${TTS_DIR}/lib/libqwen3tts.dll.a"
+        IMPORTED_LOCATION "${TTS_DIR}/bin/libqwen3tts.dll"
     )
 
-    target_include_directories(
-        markdown_parser_test
-        PRIVATE
-            ${CMAKE_SOURCE_DIR}/src
-            ${md4c_SOURCE_DIR}/src
+    target_link_libraries(agent PRIVATE qwen3tts)
+
+    add_custom_command(
+        TARGET agent POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${TTS_DIR}/bin/libqwen3tts.dll"
+            "$<TARGET_FILE_DIR:agent>"
     )
 
-    target_link_libraries(
-        markdown_parser_test
-        PRIVATE
-            md4c
+elseif(UNIX)
+    set(TTS_LIB_DIR "${TTS_DIR}/lib")
+    set(TTS_GGML_DIR "${TTS_LIB_DIR}/ggml")
+
+    add_library(qwen3tts SHARED IMPORTED)
+
+    set_target_properties(qwen3tts PROPERTIES
+        IMPORTED_LOCATION "${TTS_LIB_DIR}/libqwen3tts.so"
+        IMPORTED_SONAME "libqwen3tts.so.0"
+        INTERFACE_INCLUDE_DIRECTORIES "${TTS_DIR}/include"
+    )
+
+    target_link_libraries(agent PRIVATE qwen3tts)
+
+    # Permite encontrar as bibliotecas GGML locais em execução.
+    set_target_properties(agent PROPERTIES
+        BUILD_RPATH "${TTS_GGML_DIR}"
+        INSTALL_RPATH "$ORIGIN/../lib/ggml"
+    )
+
+    add_custom_command(
+        TARGET agent POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${TTS_LIB_DIR}/libqwen3tts.so.0.1.0"
+            "$<TARGET_FILE_DIR:agent>/libqwen3tts.so.0.1.0"
+        COMMAND ${CMAKE_COMMAND} -E create_symlink
+            "libqwen3tts.so.0.1.0"
+            "$<TARGET_FILE_DIR:agent>/libqwen3tts.so.0"
+        COMMAND ${CMAKE_COMMAND} -E create_symlink
+            "libqwen3tts.so.0"
+            "$<TARGET_FILE_DIR:agent>/libqwen3tts.so"
+        VERBATIM
     )
 endif()

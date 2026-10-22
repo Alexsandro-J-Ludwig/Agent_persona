@@ -1,4 +1,5 @@
 #include "historyManager.h"
+#include "../internal_tools/internalTools.h"
 
 void HistoryManager::createHistory(ModelRole role, bool thinking)
 {
@@ -31,8 +32,13 @@ void HistoryManager::addHistory(
 
     history.push_back({{"role", role},
                        {"content", message}});
-}
 
+    std::cerr << "\n========== LOG HISTORICO ==========\n"
+              << "[History] Role: " << role << '\n'
+              << "[History] Content: " << message << '\n'
+              << "===================================\n"
+              << std::flush;
+}
 // ===========================================================
 // Comprensao de contexto
 // ===========================================================
@@ -42,7 +48,7 @@ void HistoryManager::compressor()
         history.begin() + 1,
         history.end());
 
-    ToolResult summary = tools.executeSystemTool(
+    auto summary = tools.executeSystemTool(
         "compressor",
         Ollama::json(messages).dump());
 
@@ -58,6 +64,12 @@ void HistoryManager::compressor()
 
     history.push_back({{"role", "system"},
                        {"content", summary.output}});
+
+    std::cerr << "\n========== LOG HISTORICO RESUMO ==========\n"
+              << "[History] Role: system\n"
+              << "[History] Content: " << summary.output << '\n'
+              << "============================================\n"
+              << std::flush;
 }
 
 const std::vector<Ollama::json> &

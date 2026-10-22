@@ -28,14 +28,6 @@ namespace Config
     {
         return "C:\\";
     }
-
-    constexpr std::string_view getServerDrive()
-    {
-        if constexpr (ENVIRONMENT == Environment::Work)
-            return "Z:\\";
-        else
-            return "";
-    }
 }
 
 #endif

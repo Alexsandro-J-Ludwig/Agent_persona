@@ -35,6 +35,13 @@ Ollama::json Ollama::generate(
         throw std::runtime_error(
             "Ollama retornou HTTP " +
             std::to_string(response->status));
+
+        std::cerr << "\n========== ERRO OLLAMA ==========\n"
+                  << "[Ollama] HTTP: " << response->status << '\n'
+                  << "[Ollama] BODY: " << response->body << '\n'
+                  << "[Ollama] Origem: Ollama.cpp\n"
+                  << "================================\n"
+                  << std::flush;
     }
 
     return json::parse(response->body);
@@ -75,6 +82,13 @@ Ollama::json Ollama::chat(
             "Ollama retornou HTTP " +
             std::to_string(response->status));
     }
+
+    std::cerr << "\n========== ERRO OLLAMA ==========\n"
+              << "[Ollama] HTTP: " << response->status << '\n'
+              << "[Ollama] BODY: " << response->body << '\n'
+              << "[Ollama] Origem: Ollama.cpp\n"
+              << "================================\n"
+              << std::flush;
 
     return json::parse(response->body);
 }
@@ -144,6 +158,13 @@ std::string Ollama::chatStream(
         throw std::runtime_error(
             "Ollama retornou HTTP " +
             std::to_string(response->status));
+
+        std::cerr << "\n========== ERRO OLLAMA ==========\n"
+                  << "[Ollama] HTTP: " << response->status << '\n'
+                  << "[Ollama] BODY: " << response->body << '\n'
+                  << "[Ollama] Origem: Ollama.cpp\n"
+                  << "================================\n"
+                  << std::flush;
     }
 
     if (!buffer.empty())

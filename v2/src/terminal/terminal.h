@@ -31,24 +31,23 @@ class TerminalDisplay
 {
 public:
     using SubmitCallback =
-        std::function<void(const std::string&)>;
+        std::function<void(const std::string &)>;
 
     void run(SubmitCallback onSubmit);
-    void setStatus(const std::string& status);
+    void setStatus(const std::string &status);
+    void setAudioStatus(const bool status);
 
     MessageId addMessage(
-        const std::string& role,
-        const std::string& message
-    );
+        const std::string &role,
+        const std::string &message);
 
     void appendChunk(
         MessageId id,
-        const std::string& chunk
-    );
+        const std::string &chunk);
 
     void startThinking();
     double stopThinking();
-    
+
     Element commandView();
 
 private:
@@ -64,6 +63,7 @@ private:
 
     float scrollPosition = 1.0f;
     bool showCommands = false;
+    std::atomic<bool> audioEnabled{false};
 
     MessageId nextId = 0;
 

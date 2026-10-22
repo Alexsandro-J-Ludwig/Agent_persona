@@ -11,7 +11,8 @@
 #include <format>
 #include "src/configs/models.h"
 #include "src/ollama/ollama.h"
-#include "src/audio/audioPlayer.h"
+#include "src/agent/internal_tools/audio/ttsService.h"
+
 #include <httplib.h>
 
 enum class ToolCaller
@@ -44,10 +45,7 @@ public:
 
 private:
     Ollama ollama;
-    AudioPlayer player;
-
-    std::unique_ptr<httplib::Client> client =
-        std::make_unique<httplib::Client>("http://127.0.0.1:5001");
+    TTSService tts;
 
     ToolResult execute(
         ToolCaller caller,
@@ -63,6 +61,7 @@ private:
 
     ToolResult compressor(
         const std::string &arguments);
+
     ToolResult audioPlayer(const std::string &response);
 };
 

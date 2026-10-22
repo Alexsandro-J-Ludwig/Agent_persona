@@ -212,6 +212,13 @@ void TerminalDisplay::setStatus(const std::string &status)
     screen.PostEvent(Event::Custom);
 }
 
+void TerminalDisplay::setAudioStatus(const bool status)
+{
+    audioEnabled.store(status);
+
+    screen.PostEvent(Event::Custom);
+}
+
 // ============================================================
 // INTERFACE PRINCIPAL
 // ============================================================
@@ -279,6 +286,11 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
             | color(Color::Yellow),
 
         filler(),
+
+        text("Modo de fala: ") | color(Color::Yellow2),
+        text(audioEnabled.load() ? "ativado" : "desativado")
+            | color(Color::Cyan),
+        text(" | "),
 
         text("[Enter] Enviar")
             | color(Color::Green),
