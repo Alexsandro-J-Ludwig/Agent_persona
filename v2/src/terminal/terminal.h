@@ -1,7 +1,10 @@
 #ifndef TERMINAL_H
 #define TERMINAL_H
 
-#include <ftxui/ftxui.hpp>
+#include <ftxui/component/component.hpp>
+#include <ftxui/component/screen_interactive.hpp>
+#include <ftxui/dom/elements.hpp>
+#include <ftxui/dom/table.hpp>
 
 #include <atomic>
 #include <chrono>
@@ -14,8 +17,6 @@
 
 #include "src/markdown/markdownRenderer.h"
 #include "src/markdown/markdownFtxui.h"
-
-using namespace ftxui;
 
 using MessageId = std::uint64_t;
 
@@ -30,51 +31,57 @@ struct ChatMessage
 class TerminalDisplay
 {
 public:
-    using SubmitCallback =
-        std::function<void(const std::string &)>;
+    using SubmitCallback = std::function<void(const std::string &)>;
 
+    // ---- Ciclo de vida ----
     void run(SubmitCallback onSubmit);
+
+    // ---- Mensagens ----
+    MessageId addMessage(const std::string &role, const std::string &message);
+    void appendChunk(MessageId id, const std::string &chunk);
+
+    // ---- Estado visível (status, áudio, "pensando") ----
     void setStatus(const std::string &status);
-    void setAudioStatus(const bool status);
-
-    MessageId addMessage(
-        const std::string &role,
-        const std::string &message);
-
-    void appendChunk(
-        MessageId id,
-        const std::string &chunk);
-
+    void setAudioStatus(bool status);
     void startThinking();
+    void setAwaitToken();
     double stopThinking();
 
-    Element commandView();
+    // ---- Elementos reutilizáveis ----
+    ftxui::Element commandView();
+    ftxui::Element spinnerElement();
 
 private:
-    std::string prompt;
-    std::vector<ChatMessage> messages;
+    // ---- Construção da UI ----
+    ftxui::Component initDisplay();
+    ftxui::Component displayInput(SubmitCallback onSubmit);
+    ftxui::Component thinkingStatus();
 
+    // ---- Tela ----
+    ftxui::ScreenInteractive screen = ftxui::ScreenInteractive::Fullscreen();
+
+    // ---- Estado compartilhado entre threads (protegido por chat_mutex) ----
     std::mutex chat_mutex;
+    std::vector<ChatMessage> messages;
     std::string statusMessage;
-
-    std::chrono::steady_clock::time_point generationStart{};
-    std::atomic<bool> isGenerating{false};
-    std::jthread timerThread;
-
-    float scrollPosition = 1.0f;
-    bool showCommands = false;
-    std::atomic<bool> audioEnabled{false};
-
     MessageId nextId = 0;
 
+    // ---- Estado atômico (lido pela UI, escrito por outras threads) ----
+    std::atomic<bool> isGenerating{false};
+    std::atomic<bool> audioEnabled{false};
+    std::atomic<int> spinnerFrame{0};
+    std::chrono::steady_clock::time_point generationStart{};
+    std::jthread timerThread;
+
+
+    // ---- Estado só da UI ----
+    std::string prompt;
+    float scrollPosition = 1.0f;
+    bool showCommands = false;
+    bool awaitToken = false;
+
+    // ---- Renderização ----
     MarkdownRenderer render;
-
-    ScreenInteractive screen =
-        ScreenInteractive::Fullscreen();
-
-    Component displayInput(SubmitCallback onSubmit);
-    Component initDisplay();
-    Component thinkingStatus();
 };
 
 #endif

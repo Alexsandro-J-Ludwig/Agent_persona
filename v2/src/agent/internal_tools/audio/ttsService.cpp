@@ -1,24 +1,30 @@
 #include "ttsService.h"
+#include "platform.h"
 #include "src/configs/models.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <iostream>
+#include <mutex>
+
+#ifndef _WIN32
+#include <csignal>
+#endif
 
 TTSService::TTSService()
 {
+#ifndef _WIN32
+    std::signal(SIGPIPE, SIG_IGN); // fwrite retorna erro em vez de matar o processo
+#endif
+
     const Model &model = getModel(ModelRole::TTS);
     model_path = model.name ? model.name : "";
     sample_rate = model.tts.model_rate > 0 ? model.tts.model_rate : 22050;
 
     if (openStream())
-    {
-        std::cerr << "[TTS] Piper inicializado em modo streaming persistente ("
-                  << model_path << " @ " << sample_rate << " Hz)\n";
-    }
+        std::cerr << "[TTS] Piper iniciado (" << model_path << " @ " << sample_rate << " Hz)\n";
     else
-    {
         std::cerr << "[TTS ERRO] Nao foi possivel abrir o pipeline do Piper.\n";
-    }
 }
 
 TTSService::~TTSService()
@@ -32,48 +38,45 @@ bool TTSService::openStream()
     if (!model.name || model.name[0] == '\0')
         return false;
 
+    namespace fs = std::filesystem;
     const auto &cfg = model.tts;
 
-    // Força formatação com ponto decimal (ex: 0.88 em vez de 0,88 caso o locale do sistema esteja em PT-BR)
+    const fs::path exe = fs::absolute(platform::piperExecutable());
+    if (!fs::exists(exe))
+    {
+        std::cerr << "[TTS ERRO] Piper nao encontrado em " << exe << '\n';
+        return false;
+    }
+
     char flags[256];
-    std::snprintf(
-        flags,
-        sizeof(flags),
-        "--length_scale %.2f --noise_scale %.3f --noise_w %.2f --sentence_silence %.2f",
-        cfg.length_scale,
-        cfg.noise_scale,
-        cfg.noise_w,
-        cfg.sentence_silence);
+    std::snprintf(flags, sizeof(flags),
+                  "--length_scale %.2f --noise_scale %.3f --noise_w %.2f --sentence_silence %.2f",
+                  cfg.length_scale, cfg.noise_scale, cfg.noise_w, cfg.sentence_silence);
 
-#ifdef _WIN32
-    std::string cmd = "piper --model \"" + std::string(model.name) + "\" " + flags + " --output-raw 2>NUL | "
-                      "ffplay -nodisp -autoexit -f s16le -ar " + std::to_string(cfg.playback_rate) + " -ac 1 - 2>NUL";
-    piper_stream = _popen(cmd.c_str(), "w");
-#else
-    std::string cmd = "piper-tts --model \"" + std::string(model.name) + "\" " + flags + " --output-raw 2>/dev/null | "
-                      "pacat --rate=" + std::to_string(cfg.playback_rate) + " --channels=1 --format=s16le --latency-msec=40 2>/dev/null";
-    piper_stream = popen(cmd.c_str(), "w");
-#endif
+    // piper ... --output_raw | player
+    const std::string cmd =
+        platform::quote(exe) + " --model " + platform::quote(fs::absolute(model.name)) +
+        " " + flags + " --output_raw | " + platform::playerCommand(sample_rate);
 
-    std::cerr << "[TTS] Comando ativo: " << cmd << '\n';
-    return (piper_stream != nullptr);
+    std::cerr << "[TTS DEBUG] Comando: " << cmd << '\n';
+
+    piper_stream = platform::openPipeWrite(cmd);
+    return piper_stream != nullptr;
 }
 
 void TTSService::closeStream()
 {
     if (piper_stream)
     {
-#ifdef _WIN32
-        _pclose(piper_stream);
-#else
-        pclose(piper_stream);
-#endif
+        platform::closePipe(piper_stream);
         piper_stream = nullptr;
     }
 }
 
 bool TTSService::speak(const std::string &text)
 {
+    std::cerr << "[TTS DEBUG] speak() recebeu: " << text << '\n';
+
     if (text.empty())
         return false;
 
@@ -96,6 +99,9 @@ bool TTSService::speak(const std::string &text)
 
     const std::size_t written = std::fwrite(clean_text.data(), 1, clean_text.size(), piper_stream);
     std::fflush(piper_stream);
+
+    std::cerr << "[TTS DEBUG] Bytes enviados: "
+              << written << "/" << clean_text.size() << '\n';
 
     if (written != clean_text.size())
     {

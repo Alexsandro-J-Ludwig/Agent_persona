@@ -79,7 +79,8 @@ Element styledText(const std::string& content, const Style& style) {
     if (style.strong) node = node | bold;
     if (style.italic) node = node | italic;
     if (style.strike) node = node | strikethrough;
-    if (style.code) node = node | color(Color::YellowLight) | bgcolor(Color::Palette256(238));
+    // Usa a cor de texto padrao do terminal para manter contraste no tema ativo.
+    if (style.code) node = node | bgcolor(Color::Palette256(238));
     if (style.math) node = node | color(Color::MagentaLight);
     if (style.link) {
         node = node | color(Color::CyanLight) | underlined;
@@ -197,14 +198,14 @@ Element renderCodeBlock(const MarkdownNode& node) {
 
     Elements lines;
     if (!node.language.empty())
-        lines.push_back(text("  " + node.language) | bold | color(Color::Cyan));
+        lines.push_back(text("  " + node.language) | bold);
 
     size_t start = 0;
     while (start <= code.size()) {
         size_t end = code.find('\n', start);
         if (end == std::string::npos) end = code.size();
         // paragraph() permite quebra de linhas longas e evita cortar o código.
-        lines.push_back(paragraph(code.substr(start, end-start)) | color(Color::GrayLight));
+        lines.push_back(paragraph(code.substr(start, end-start)));
         if (end == code.size()) break;
         start = end + 1;
     }
@@ -260,12 +261,10 @@ Element renderBlock(const MarkdownNode& node) {
         case MarkdownType::Heading: {
             Element heading = inlineContent(node) | bold;
             if (node.headingLevel == 1) {
-                return vbox({heading | color(Color::CyanLight),
+                return vbox({heading,
                              separator() | color(Color::Cyan)});
             }
-            if (node.headingLevel == 2) return heading | color(Color::BlueLight);
-            if (node.headingLevel == 3) return heading | color(Color::YellowLight);
-            return heading | color(Color::GrayLight);
+            return heading;
         }
         case MarkdownType::Quote:
             return hbox({text("▎ ") | color(Color::Cyan),

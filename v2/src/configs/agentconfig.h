@@ -7,8 +7,7 @@ namespace Config
 {
     struct Properties
     {
-        std::size_t max_rounds = 20;
-        std::size_t max_msg = 32;
+        static constexpr std::size_t max_rounds = 8;;
         std::size_t max_bytes = 50000;
 
         std::string agent_fast = R"(

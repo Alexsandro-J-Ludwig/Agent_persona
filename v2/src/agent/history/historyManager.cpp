@@ -1,7 +1,8 @@
 #include "historyManager.h"
 #include "../internal_tools/internalTools.h"
 
-void HistoryManager::createHistory(ModelRole role, bool thinking)
+void HistoryManager::createHistory(
+    ModelRole role, bool thinking)
 {
     const std::string systemPrompt = properties.getSystemPrompt(role, thinking);
 
@@ -11,27 +12,41 @@ void HistoryManager::createHistory(ModelRole role, bool thinking)
                        {"content", systemPrompt}});
 }
 
-void HistoryManager::alterSystemHistory(ModelRole role, bool thinking)
+void HistoryManager::alterSystemHistory(
+    ModelRole role, bool thinking)
 {
     const std::string systemPrompt = properties.getSystemPrompt(role, thinking);
 
     history[0]["content"] = systemPrompt;
 }
 
+std::size_t HistoryManager::estimateChars() const
+{
+    std::size_t total = 0;
+    for (const auto &msg : history)
+    {
+        total += msg.value("content", "").size();
+        if (msg.contains("tool_calls"))
+            total += msg["tool_calls"].dump().size();
+    }
+    return total;
+}
+
 void HistoryManager::addHistory(
     const std::string &role,
-    const std::string &message)
+    const std::string &message,
+    const Ollama::json &tool_calls,
+    const std::string &tool_name)
 {
-    if (properties.max_msg == 0)
-        return;
 
-    if (history.size() >= properties.max_msg)
-    {
-        compressor();
-    }
+    Ollama::json msg = {{"role", role}, {"content", message}};
+    if (!tool_calls.empty())
+        msg["tool_calls"] = tool_calls;
 
-    history.push_back({{"role", role},
-                       {"content", message}});
+    if (!tool_name.empty())
+        msg["tool_name"] = tool_name;
+
+    history.push_back(std::move(msg));
 
     std::cerr << "\n========== LOG HISTORICO ==========\n"
               << "[History] Role: " << role << '\n'
@@ -39,6 +54,16 @@ void HistoryManager::addHistory(
               << "===================================\n"
               << std::flush;
 }
+
+void HistoryManager::compressIfNeeded(ModelRole role)
+{
+    const std::size_t estTokens = static_cast<std::size_t>(estimateChars() / 3.5);
+    const std::size_t limit = static_cast<std::size_t>(getModel(role).num_ctx * 0.7);
+
+    if (estTokens > limit)
+        compressor();
+}
+
 // ===========================================================
 // Comprensao de contexto
 // ===========================================================

@@ -11,6 +11,13 @@
 #include "src/configs/models.h"
 #include "src/configs/httplibconfig.h"
 
+// Retorna texto e um array de chamadas de funcoes
+struct ChatResult
+{
+    std::string response;
+    nlohmann::json toolCalls = nlohmann::json::array();
+};
+
 class Ollama
 {
 public:
@@ -30,11 +37,13 @@ public:
         const std::string &prompt,
         bool thinking = false);
 
-    std::string chatStream(
+    ChatResult chatStream(
         const Model &model,
         const std::vector<json> &history,
         StreamCallback callback,
-        bool thinking = false);
+        bool thinking = false,
+        const json &tools = json::array()
+    );
 
 private:
     std::unique_ptr<httplib::Client> client;

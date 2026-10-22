@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <iostream>
 
+using namespace ftxui;
+
 // ============================================================
 // MENSAGENS
 // ============================================================
@@ -26,21 +28,22 @@ Component TerminalDisplay::thinkingStatus()
 
         const auto elapsed =
             std::chrono::duration_cast<std::chrono::seconds>(
-                std::chrono::steady_clock::now() - generationStart
-            ).count();
+                std::chrono::steady_clock::now() - generationStart)
+                .count();
 
         const auto minutes = elapsed / 60;
         const auto seconds = elapsed % 60;
 
         std::string time =
-            (minutes < 10 ? "0" : "") +
-            std::to_string(minutes) + ":" +
-            (seconds < 10 ? "0" : "") +
-            std::to_string(seconds);
+            (minutes < 10 ? "0" : "") + std::to_string(minutes) + ":" +
+            (seconds < 10 ? "0" : "") + std::to_string(seconds);
+
+        const int frame = spinnerFrame.load();
 
         return hbox({
-            text("Pensando... ") | color(Color::Yellow2),
-            text(time) | color(Color::White)
+            spinner(2, frame) | bold | color(Color::Yellow2),
+            text(" Pensando... ") | color(Color::Yellow2),
+            text(time) | color(Color::White),
         }); });
 }
 
@@ -51,14 +54,16 @@ void TerminalDisplay::startThinking()
 
     timerThread = std::jthread([this](std::stop_token stop)
                                {
-        while (!stop.stop_requested() && isGenerating.load()) {
-            std::this_thread::sleep_for(
-                std::chrono::milliseconds(200)
-            );
+    while (!stop.stop_requested() && isGenerating.load())
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-            if (!stop.stop_requested() && isGenerating.load())
-                screen.PostEvent(Event::Custom);
-        } });
+        if (!stop.stop_requested() && isGenerating.load())
+        {
+            ++spinnerFrame;
+            screen.PostEvent(Event::Custom);
+        }
+    } });
 
     screen.PostEvent(Event::Custom);
 }
@@ -95,7 +100,7 @@ MessageId TerminalDisplay::addMessage(
 
         entry.markdown.append(message);
 
-        if (role == "User")
+        if (role != "Assistant")
             entry.markdown.finish();
 
         messages.push_back(std::move(entry));

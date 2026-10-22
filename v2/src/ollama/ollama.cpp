@@ -32,16 +32,16 @@ Ollama::json Ollama::generate(
 
     if (response->status < 200 || response->status >= 300)
     {
-        throw std::runtime_error(
-            "Ollama retornou HTTP " +
-            std::to_string(response->status));
-
         std::cerr << "\n========== ERRO OLLAMA ==========\n"
                   << "[Ollama] HTTP: " << response->status << '\n'
                   << "[Ollama] BODY: " << response->body << '\n'
                   << "[Ollama] Origem: Ollama.cpp\n"
                   << "================================\n"
                   << std::flush;
+
+        throw std::runtime_error(
+            "Ollama retornou HTTP " +
+            std::to_string(response->status));
     }
 
     return json::parse(response->body);
@@ -78,26 +78,27 @@ Ollama::json Ollama::chat(
 
     if (response->status < 200 || response->status >= 300)
     {
+        std::cerr << "\n========== ERRO OLLAMA ==========\n"
+                  << "[Ollama] HTTP: " << response->status << '\n'
+                  << "[Ollama] BODY: " << response->body << '\n'
+                  << "[Ollama] Origem: Ollama.cpp\n"
+                  << "================================\n"
+                  << std::flush;
+
         throw std::runtime_error(
             "Ollama retornou HTTP " +
             std::to_string(response->status));
     }
 
-    std::cerr << "\n========== ERRO OLLAMA ==========\n"
-              << "[Ollama] HTTP: " << response->status << '\n'
-              << "[Ollama] BODY: " << response->body << '\n'
-              << "[Ollama] Origem: Ollama.cpp\n"
-              << "================================\n"
-              << std::flush;
-
     return json::parse(response->body);
 }
 
-std::string Ollama::chatStream(
+ChatResult Ollama::chatStream(
     const Model &model,
     const std::vector<json> &messages,
     StreamCallback callback,
-    bool thinking)
+    bool thinking,
+    const json &tools)
 {
     json body = {
         {"model", model.name},
@@ -107,11 +108,15 @@ std::string Ollama::chatStream(
         {"think", thinking},
         {"options", {{"num_ctx", model.num_ctx}, {"num_predict", model.num_predict}}}};
 
+    if (!tools.empty())
+        body["tools"] = tools;
+
     std::string buffer;
     std::string responseText;
+    json toolCalls = json::array();
 
     auto receiver =
-        [&buffer, &responseText, callback](const char *data, std::size_t lenght)
+        [&buffer, &responseText, &toolCalls, callback](const char *data, std::size_t lenght)
     {
         buffer.append(data, lenght);
 
@@ -127,12 +132,21 @@ std::string Ollama::chatStream(
 
             json chunk = json::parse(line);
 
-            std::string content =
-                chunk["message"].value("content", "");
+            if (chunk.contains("message"))
+            {
+                const auto &message = chunk.at("message");
 
-            responseText += content;
+                if (message.contains("tool_calls") &&
+                    message.at("tool_calls").is_array())
+                {
+                    for (const auto &call : message.at("tool_calls"))
+                        toolCalls.push_back(call);
+                }
 
-            callback(content);
+                const auto content = message.value("content", "");
+                responseText += content;
+                callback(content);
+            }
         }
 
         return true;
@@ -155,32 +169,39 @@ std::string Ollama::chatStream(
 
     if (response->status < 200 || response->status >= 300)
     {
-        throw std::runtime_error(
-            "Ollama retornou HTTP " +
-            std::to_string(response->status));
-
         std::cerr << "\n========== ERRO OLLAMA ==========\n"
                   << "[Ollama] HTTP: " << response->status << '\n'
                   << "[Ollama] BODY: " << response->body << '\n'
                   << "[Ollama] Origem: Ollama.cpp\n"
                   << "================================\n"
                   << std::flush;
+
+        throw std::runtime_error(
+            "Ollama retornou HTTP " +
+            std::to_string(response->status));
     }
 
-    if (!buffer.empty())
+    auto processLine = [&](const std::string &line)
     {
-        json chunk = json::parse(buffer);
+        if (line.empty())
+            return;
+        json chunk = json::parse(line);
+        if (!chunk.contains("message"))
+            return;
 
-        if (chunk.contains("message"))
+        const auto &message = chunk.at("message");
+
+        if (message.contains("tool_calls") && message.at("tool_calls").is_array())
+            for (const auto &call : message.at("tool_calls"))
+                toolCalls.push_back(call);
+
+        const std::string content = message.value("content", "");
+        if (!content.empty())
         {
-            std::string content =
-                chunk["message"].value("content", "");
-
             responseText += content;
+            callback(content);
         }
+    };
 
-        callback(chunk);
-    }
-
-    return responseText;
+    return {responseText, toolCalls};
 }

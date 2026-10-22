@@ -1,4 +1,5 @@
 #include "agentOrchestrator.h"
+#include "src/agent/internal_tools/tool_schemas.h"
 #include <stdexcept>
 
 Orquestrador::Orquestrador()
@@ -29,7 +30,8 @@ std::string Orquestrador::run(
     ModelRole role,
     bool thinking,
     bool audio,
-    Ollama::StreamCallback onChunk)
+    Ollama::StreamCallback onChunk,
+    ToolCallback onTool)
 {
     const Model &model = getModel(role);
 
@@ -40,51 +42,50 @@ std::string Orquestrador::run(
         manager.alterSystemHistory(role, thinking);
 
     // Adiciona o prompt do usuario no historico
+    manager.compressIfNeeded(role);
     manager.addHistory("user", prompt);
 
-    std::string pendingSpeech;
+    ChatResult response;
+    nlohmann::json toolSchemas = tools.getSchema();
 
-    std::string response = ollama.chatStream(
-        model,
-        manager.getHistory(),
-        [&](const std::string &chunk)
-        {
-            onChunk(chunk); // Atualiza o terminal.
+    for (int round = 0;; round++)
+    {
+        const bool toolsAllowed = round < Config::Properties::max_rounds;
 
-            if (audio)
+        response = ollama.chatStream(
+            model,
+            manager.getHistory(),
+            [&](const std::string &chunk)
             {
-                pendingSpeech += chunk;
+                onChunk(chunk); // Atualiza o terminal.
 
-                bool hasEndPunct = (pendingSpeech.find('.') != std::string::npos ||
-                                    pendingSpeech.find('!') != std::string::npos ||
-                                    pendingSpeech.find('?') != std::string::npos ||
-                                    pendingSpeech.find('\n') != std::string::npos ||
-                                    pendingSpeech.find(", ") != std::string::npos);
-
-                // Se a frase já passou de 45 caracteres e tem uma vírgula ou ':', já envia pro TTS!
-                bool hasLongClause = (pendingSpeech.size() >= 45 &&
-                                      (pendingSpeech.find(',') != std::string::npos ||
-                                       pendingSpeech.find(':') != std::string::npos ||
-                                       pendingSpeech.find(';') != std::string::npos));
-
-                if (hasEndPunct || hasLongClause)
+                if (audio)
                 {
-                    if (pendingSpeech.find_first_not_of(" \t\r\n") != std::string::npos)
-                        speech.enqueue(pendingSpeech);
-                    pendingSpeech.clear();
+                    speech.feed(chunk);
                 }
-            }
-        },
-        thinking);
+            },
+            thinking,
+            toolsAllowed ? toolSchemas : nlohmann::json::array());
 
-    if (audio && !pendingSpeech.empty())
+        if (audio)
+            speech.flush();
 
-        speech.enqueue(pendingSpeech);
+        manager.addHistory("assistant", response.response, response.toolCalls);
 
-    // Adiciona a resposta da IA no historico
-    manager.addHistory("assistant", response);
+        if (response.toolCalls.empty() || !toolsAllowed)
+            break;
 
-    return response;
+        taskManager.toolCalling(response.toolCalls,
+                                [&](const std::string &name, const ToolResult &r)
+                                {
+                                    manager.addHistory("tool", r.success ? r.output : r.error,
+                                                       Ollama::json::array(), name);
+                                    if (onTool)
+                                        onTool(name, r);
+                                });
+    }
+
+    return response.response;
 }
 
 void Orquestrador::setAudioEnabled(bool enabled)
