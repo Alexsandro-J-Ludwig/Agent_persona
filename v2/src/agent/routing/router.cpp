@@ -1,6 +1,6 @@
 #include "router.h"
 
-Router::Router(InternalTools& tool)
+Router::Router(InternalTools &tool)
     : tool(tool)
 {
 }
@@ -58,29 +58,29 @@ std::pair<bool, std::string> Router::routeDecide(const std::string &prompt)
 {
     std::string texto = prompt;
 
-    if (prompt.find("/fast") != std::string::npos)
+    if (auto pos = prompt.find("/fast") != std::string::npos)
     {
         agent.model = ModelRole::Agent;
         agent.thinking = false;
 
-        texto.erase(0, 5);
+        texto.erase(pos, 5);
 
         return {true, texto};
     }
-    else if (prompt.find("/think") != std::string::npos)
+    if (auto pos = prompt.find("/think") != std::string::npos)
     {
         agent.model = ModelRole::Think;
         agent.thinking = true;
 
-        texto.erase(0, 6);
+        texto.erase(pos, 6);
 
         return {true, texto};
     }
-    else if (prompt.find("/audio") != std::string::npos)
+    if (auto pos = prompt.find("/audio") != std::string::npos)
     {
         agent.audio = !agent.audio;
 
-        texto.erase(0, 6);
+        texto.erase(pos, 6);
 
         if (texto.empty())
             return {false, ""};
@@ -128,6 +128,9 @@ std::tuple<ModelRole, bool, bool, std::string> Router::route(
     const std::string &prompt)
 {
     auto [select, texto] = routeDecide(prompt);
+
+    if (texto.find_first_not_of(" \t\r\n") == std::string::npos)
+        return {agent.model, agent.thinking, agent.audio, ""};
 
     // Comando explícito tem prioridade.
     if (select)
