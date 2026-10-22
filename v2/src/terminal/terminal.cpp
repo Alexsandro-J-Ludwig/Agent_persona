@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <iostream>
 
+using namespace ftxui;
+
 // ============================================================
 // MENSAGENS
 // ============================================================
@@ -98,7 +100,7 @@ MessageId TerminalDisplay::addMessage(
 
         entry.markdown.append(message);
 
-        if (role == "User")
+        if (role != "Assistant")
             entry.markdown.finish();
 
         messages.push_back(std::move(entry));

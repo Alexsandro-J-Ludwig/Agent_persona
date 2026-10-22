@@ -18,7 +18,7 @@ void Chat::sendMessage(const std::string &prompt)
     ai_thread = std::thread([this, prompt]()
                             {
     bool timerStarted = false;
-    std::optional<std::size_t> id;
+    std::optional<MessageId> current; 
 
     try
     {
@@ -34,9 +34,6 @@ void Chat::sendMessage(const std::string &prompt)
             return;
         }
 
-        id = terminal.addMessage("IA", "");
-
-
         // Feedback visual para o usuario identificar o que o modelo está fazendo <- MERECE REVISÃO
         // Se o modelo esta pensando ou nao
         terminal.setStatus(
@@ -51,18 +48,27 @@ void Chat::sendMessage(const std::string &prompt)
         timerStarted = true;
 
         // Realiza o chamado principal do orquestrador
-        orquestrador.run(
-            texto,
-            role,
-            thinking,
-            audio,
-            [this, messageId = *id](const std::string& chunk)
+        orquestrador.run(texto, role, thinking, audio,
+            // texto do modelo: vai para a mensagem atual
+            [&](const std::string &chunk)
             {
-                terminal.appendChunk(messageId, chunk);
-            }
-        );
+                if (!current)
+                {
+                    if (chunk.find_first_not_of(" \t\r\n") == std::string::npos)
+                        return;                               
+                    current = terminal.addMessage("IA", "");
+                }
+                terminal.appendChunk(*current, chunk);
+            },
 
-        const double elapsed = terminal.stopThinking();
+            // tool: mostra e fecha a mensagem atual; a próxima rodada abre outra
+            [&](const std::string &name, const ToolResult &r)
+            {
+                terminal.addMessage("Tool", name + " → " + (r.success ? r.output : "erro: " + r.error));
+                current.reset();
+            });
+
+        terminal.stopThinking();
         timerStarted = false;
 
         terminal.setStatus("");
@@ -72,8 +78,8 @@ void Chat::sendMessage(const std::string &prompt)
         if (timerStarted)
             terminal.stopThinking();
 
-        if (id)
-            terminal.appendChunk(*id, "\n\n[Erro: " + std::string(e.what()) + "]");
+        if (current)
+            terminal.appendChunk(*current, "\n\n[Erro: " + std::string(e.what()) + "]");
         else
             terminal.addMessage("Erro", e.what());
 
