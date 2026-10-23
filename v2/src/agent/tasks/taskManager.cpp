@@ -1,12 +1,19 @@
 #include "taskManager.hpp"
 
+#include <future>
+#include <vector>
+#include <string>
+#include <utility>
+
 void TaskManager::toolCalling(const nlohmann::json &toolCalls,
                               const OnToolResult &onResult)
 {
+    std::vector<PendingTool> pending;
+    pending.reserve(toolCalls.size());
+
     for (const auto &call : toolCalls)
     {
         std::string name = "desconhecida";
-        ToolResult result{false, "", "Chamada de ferramenta inválida"};
 
         try
         {
@@ -14,12 +21,29 @@ void TaskManager::toolCalling(const nlohmann::json &toolCalls,
             name = fn.at("name").get<std::string>();
 
             std::string args = "{}";
+
             if (fn.contains("arguments"))
+            {
                 args = fn.at("arguments").is_string()
                            ? fn.at("arguments").get<std::string>()
                            : fn.at("arguments").dump();
+            }
 
-            result = tools.executeModelTool(name, args);
+            pending.push_back({name, tools.execute(ToolCaller::Model, name, args)});
+        }
+        catch (const std::exception &e)
+        {
+            if (onResult)
+                onResult(name, {false, "", e.what()});
+        }
+    }
+
+    for (auto &task : pending)
+    {
+        ToolResult result;
+        try
+        {
+            result = task.future.get();
         }
         catch (const std::exception &e)
         {
@@ -27,6 +51,6 @@ void TaskManager::toolCalling(const nlohmann::json &toolCalls,
         }
 
         if (onResult)
-            onResult(name, result);
+            onResult(task.name, result);
     }
 }

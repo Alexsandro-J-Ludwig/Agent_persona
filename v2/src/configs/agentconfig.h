@@ -2,12 +2,15 @@
 #define AGENTCONFIG_H
 
 #include <cstddef>
+#include <string>
+#include "models.h"
 
 namespace Config
 {
     struct Properties
     {
-        static constexpr std::size_t max_rounds = 8;;
+        static constexpr std::size_t max_rounds = 8;
+        ;
         std::size_t max_bytes = 50000;
 
         std::string agent_fast = R"(
@@ -90,6 +93,29 @@ especializado na resolução de problemas complexos.
 - Não omita informações essenciais apenas para reduzir o tamanho.
 - Reconheça incertezas e limitações.
 )";
+
+        std::string tool_instructions = R"(
+**Execução de ferramentas**
+
+Você pode solicitar múltiplas ferramentas em uma mesma resposta.
+
+- Ferramentas independentes devem ser solicitadas juntas.
+- Todas as chamadas da mesma rodada são executadas concorrentemente.
+- Você receberá todos os resultados antes da próxima rodada.
+- Se uma ferramenta depender do resultado de outra, solicite-a
+  somente após receber esse resultado.
+- Evite chamadas redundantes ou desnecessárias.
+- Nunca invente resultados de ferramentas.
+- Se uma ferramenta falhar, considere o erro antes de prosseguir.
+- Não solicite ferramentas quando puder responder adequadamente
+  sem utilizá-las.
+)";
+
+        std::string getSystemPrompt(ModelRole role, bool thinking, bool toolsEnabled) const
+        {
+            const auto &base = getSystemPrompt(role, thinking);
+            return toolsEnabled ? base + tool_instructions : base;
+        }
 
         const std::string &getSystemPrompt(
             ModelRole role,

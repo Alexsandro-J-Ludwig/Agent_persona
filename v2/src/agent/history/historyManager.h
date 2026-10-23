@@ -7,7 +7,6 @@
 #include <vector>
 #include <string>
 
-
 class InternalTools;
 
 class HistoryManager
@@ -16,7 +15,7 @@ public:
     explicit HistoryManager(InternalTools &tools) : tools(tools) {}
 
     void createHistory(ModelRole role, bool thinking);
-    void alterSystemHistory(ModelRole role, bool thinking);
+    void alterSystemHistory(ModelRole role, bool thinking, bool toolsEnabled = true);
 
     void addHistory(const std::string &role,
                     const std::string &message,

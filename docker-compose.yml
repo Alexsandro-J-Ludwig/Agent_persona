@@ -1,175 +1,40 @@
 services:
   # ============================================================
-  # OLLAMA
+  # LLAMA.CPP
   # ============================================================
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
+  llama:
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    container_name: llama
     restart: unless-stopped
 
     gpus: all
 
     environment:
-      OLLAMA_HOST: "0.0.0.0:11434"
-      OLLAMA_ORIGINS: "${OLLAMA_ORIGINS}"
-
-      # Default global.
-      # As chamadas Python sobrescrevem isso com keep_alive.
-      OLLAMA_KEEP_ALIVE: "30m"
-
-      # Permite manter o Agent residente enquanto o Think entra.
-      OLLAMA_MAX_LOADED_MODELS: "2"
-
-      # Inicialmente uma inferência por vez.
-      OLLAMA_NUM_PARALLEL: "1"
-      OLLAMA_MAX_QUEUE: "100"
-
-      # Ajuda principalmente conforme o contexto aumenta.
-      OLLAMA_FLASH_ATTENTION: "1"
-
-      # KV menor que F16 sem precisar ir direto para Q4.
-      OLLAMA_KV_CACHE_TYPE: "q8_0"
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
 
     volumes:
-      - ollama_data:/root/.ollama
-
-    networks:
-      - ollama_network
-
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 20s
-
-  # ============================================================
-  # MODELOS
-  #
-  # Agent:
-  #   Qwen3-30B-A3B Q4_K_M (thinking ligado/desligado)
-  #   ~19 GB
-  #
-  # Think:
-  #   Qwen3-Next-80B-A3B-Thinking IQ4_NL
-  #   ~45.3 GB
-  #
-  # Multimodal:
-  #   Gemma 4 E4B Q4_K_M
-  #   ~6.6 GB
-  #
-  # Total dos pesos Ollama: ~70.9 GB
-  # ============================================================
-  model-init:
-    image: ollama/ollama:latest
-    container_name: ollama-model-init
-    restart: "no"
-
-    environment:
-      OLLAMA_HOST: "http://ollama:11434"
-
-    volumes:
-      - ollama_data:/root/.ollama
-
-    networks:
-      - ollama_network
-
-    depends_on:
-      ollama:
-        condition: service_healthy
-
-    entrypoint: ["/bin/sh", "-c"]
+      - ./models:/models:ro
 
     command:
-      - |
-        set -eu
+      - "--model"
+      - "/models/agent.gguf"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8080"
+      - "--ctx-size"
+      - "8192"
+      - "--n-gpu-layers"
+      - "99"
+      - "--parallel"
+      - "1"
 
-        install_model() {
-          SOURCE="$$1"
-          TARGET="$$2"
-
-          echo "------------------------------------------"
-          echo "Modelo: $$TARGET"
-          echo "Fonte:  $$SOURCE"
-
-          if ollama show "$$TARGET" >/dev/null 2>&1; then
-            echo "$$TARGET já está instalado."
-            return
-          fi
-
-          echo "Baixando $$SOURCE..."
-          ollama pull "$$SOURCE"
-
-          echo "Criando alias $$TARGET..."
-          ollama cp "$$SOURCE" "$$TARGET"
-
-          # Remove apenas o nome original.
-          # O blob continua referenciado pelo alias TARGET.
-          ollama rm "$$SOURCE" || true
-
-          echo "$$TARGET pronto."
-        }
-
-
-        echo "=========================================="
-        echo " Inicializando modelos do Incube Agent"
-        echo "=========================================="
-
-
-        # ------------------------------------------------------
-        # AGENT
-        # Qwen3 30B-A3B original: tools + thinking ligado/desligado
-        # Q4_K_M ~19 GB
-        # ------------------------------------------------------
-
-        install_model \
-          "qwen3:30b-a3b-q4_K_M" \
-          "qwen3-30b-a3b:latest"
-
-
-        # ------------------------------------------------------
-        # THINK
-        # Qwen3-Next 80B-A3B Thinking
-        # IQ4_NL ~45.3 GB
-        # ------------------------------------------------------
-
-        install_model \
-          "hf.co/bartowski/Qwen_Qwen3-Next-80B-A3B-Thinking-GGUF:IQ4_NL" \
-          "qwen3-next-80b-a3b-thinking:latest"
-
-
-        # ------------------------------------------------------
-        # Audio
-        # ViewNeu-TTS-0.3B
-        # Q4_0 ~202 MB
-        # ------------------------------------------------------
-
-        install_model \
-          "hf.co/pnnbao-ump/VieNeu-TTS-0.3B-q4-gguf:Q4_0" \
-          "viewneu-tts-0.3b:latest"
-
-
-        echo ""
-        echo "=========================================="
-        echo " Modelos instalados"
-        echo "=========================================="
-
-        ollama list
-
-        echo "=========================================="
-        echo " Inicialização concluída"
-        echo "=========================================="
+    networks:
+      - ollama_network
 
   # ============================================================
   # KOKORO TTS
-  #
-  # Não passa pelo Ollama.
-  # Kokoro possui runtime próprio de TTS.
-  #
-  # CPU propositalmente:
-  # - apenas 82M parâmetros
-  # - não ocupa VRAM da RTX
-  # - imagem Docker bem menor
   # ============================================================
   kokoro:
     image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.9.0
@@ -178,8 +43,6 @@ services:
 
     environment:
       API_LOG_LEVEL: "WARNING"
-
-      # Voz PT-BR feminina.
       DEFAULT_VOICE: "pf_dora"
 
     networks:
@@ -200,7 +63,7 @@ services:
       - ollama_network
 
   # ============================================================
-  # CLOUDFLARE TUNNEL
+  # CLOUDFLARE
   # ============================================================
   cloudflared:
     image: cloudflare/cloudflared:latest
@@ -213,28 +76,13 @@ services:
       - ollama_network
 
     depends_on:
-      ollama:
-        condition: service_healthy
+      - llama
+      - kokoro
+      - searxng
 
-      model-init:
-        condition: service_completed_successfully
-
-      kokoro:
-        condition: service_started
-
-      searxng:
-        condition: service_started
-
-# ==============================================================
-# VOLUMES
-# ==============================================================
 volumes:
-  ollama_data:
   searxng_config:
 
-# ==============================================================
-# NETWORK
-# ==============================================================
 networks:
   ollama_network:
     driver: bridge

@@ -12,13 +12,21 @@ enum class TaskStatus
 };
 
 using OnToolResult =
-    std::function<void(const std::string &name, const ToolResult &result)>;
+    std::function<void(
+        const std::string &name,
+        const ToolResult &result)>;
 
 struct TaskResult
 {
     bool success = false;
-    std::string output = "";
-    std::string erro = "";
+    std::string output;
+    std::string error;
+};
+
+struct PendingTool
+{
+    std::string name;
+    std::future<ToolResult> future;
 };
 
 class TaskManager

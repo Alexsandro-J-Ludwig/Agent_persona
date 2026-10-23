@@ -1,14 +1,19 @@
 #include "agentOrchestrator.h"
-#include "src/agent/internal_tools/tool_schemas.h"
 #include <stdexcept>
 
 Orquestrador::Orquestrador()
     : router(tools),
       manager(tools),
+      taskManager(tools),
       speech([this](const std::string &phrase)
              {
-          const auto result =
-              tools.executeSystemTool("audioPlayer", phrase);
+          auto future = tools.execute(
+              ToolCaller::System,
+              "audioPlayer",
+              phrase
+          );
+
+          ToolResult result = future.get();
 
           if (!result.success)
               throw std::runtime_error(result.error); })
@@ -38,8 +43,6 @@ std::string Orquestrador::run(
     // Altera o system prompt com base no modelo selecionado em router
     if (manager.getHistory().empty())
         manager.createHistory(role, thinking);
-    else
-        manager.alterSystemHistory(role, thinking);
 
     // Adiciona o prompt do usuario no historico
     manager.compressIfNeeded(role);
@@ -50,7 +53,10 @@ std::string Orquestrador::run(
 
     for (int round = 0;; round++)
     {
-        const bool toolsAllowed = round < Config::Properties::max_rounds;
+        const bool toolsAllowed =
+            round < Config::Properties::max_rounds;
+
+        manager.alterSystemHistory(role, thinking, toolsAllowed);
 
         response = ollama.chatStream(
             model,
@@ -78,8 +84,11 @@ std::string Orquestrador::run(
         taskManager.toolCalling(response.toolCalls,
                                 [&](const std::string &name, const ToolResult &r)
                                 {
-                                    manager.addHistory("tool", r.success ? r.output : r.error,
-                                                       Ollama::json::array(), name);
+                                    manager.addHistory(
+                                        "tool",
+                                        r.success ? r.output : r.error,
+                                        Ollama::json::array(),
+                                        name);
                                     if (onTool)
                                         onTool(name, r);
                                 });

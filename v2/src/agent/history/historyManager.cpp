@@ -13,9 +13,10 @@ void HistoryManager::createHistory(
 }
 
 void HistoryManager::alterSystemHistory(
-    ModelRole role, bool thinking)
+    ModelRole role, bool thinking, bool toolsEnabled)
 {
-    const std::string systemPrompt = properties.getSystemPrompt(role, thinking);
+    const std::string systemPrompt =
+        properties.getSystemPrompt(role, thinking, toolsEnabled);
 
     history[0]["content"] = systemPrompt;
 }
@@ -73,9 +74,10 @@ void HistoryManager::compressor()
         history.begin() + 1,
         history.end());
 
-    auto summary = tools.executeSystemTool(
+    auto summary = tools.execute(
+        ToolCaller::System,
         "compressor",
-        Ollama::json(messages).dump());
+        Ollama::json(messages).dump()).get();
 
     if (!summary.success)
         throw std::runtime_error("Falha ao comprimir histórico: " + summary.error);

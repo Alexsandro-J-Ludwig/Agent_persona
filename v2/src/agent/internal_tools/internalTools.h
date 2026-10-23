@@ -9,6 +9,7 @@
 #include <string_view>
 #include <unordered_set>
 #include <format>
+#include <future>
 #include "src/configs/models.h"
 #include "src/ollama/ollama.h"
 #include "src/agent/internal_tools/audio/ttsService.h"
@@ -28,18 +29,24 @@ struct ToolResult
     std::string error;
 };
 
+class InternalTools;
+
+struct ToolInfo
+{
+    std::string name;
+    ToolCaller caller;
+    ToolResult (InternalTools::*handler)(const std::string &);
+};
+
 class InternalTools
 {
 public:
     using json = nlohmann::json;
 
-    InternalTools::json getSchema() const;
+    json getSchema() const;
 
-    ToolResult executeModelTool(
-        std::string_view name,
-        const std::string &arguments);
-
-    ToolResult executeSystemTool(
+    std::future<ToolResult> execute(
+        ToolCaller caller,
         std::string_view name,
         const std::string &arguments);
 
@@ -47,24 +54,19 @@ private:
     Ollama ollama;
     TTSService tts;
 
-    ToolResult execute(
-        ToolCaller caller,
-        std::string_view name,
-        const std::string &arguments);
-
-    bool isAuthorized(
-        ToolCaller caller,
-        std::string_view name) const;
-
-    ToolResult decideThink(
-        const std::string &arguments);
-
-    ToolResult compressor(
-        const std::string &arguments);
-
+    ToolResult decideThink(const std::string &arguments);
+    ToolResult compressor(const std::string &arguments);
     ToolResult audioPlayer(const std::string &response);
-
     ToolResult calculator(const std::string &arguments);
+    ToolResult searchFile(const std::string &arguments);
+
+    inline static const std::array<ToolInfo, 5> TOOLS = {{
+        {"decide_think", ToolCaller::System, &InternalTools::decideThink},
+        {"audioPlayer", ToolCaller::System, &InternalTools::audioPlayer},
+        {"compressor", ToolCaller::System, &InternalTools::compressor},
+        {"calculator", ToolCaller::Model, &InternalTools::calculator},
+        {"searchFile", ToolCaller::Model, &InternalTools::searchFile},
+    }};
 };
 
 #endif

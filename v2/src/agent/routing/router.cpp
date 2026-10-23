@@ -91,9 +91,10 @@ std::pair<bool, std::string> Router::routeDecide(const std::string &prompt)
 
 void Router::decideThink(const std::string &prompt)
 {
-    ToolResult result = tool.executeSystemTool(
+    ToolResult result = tool.execute(
+        ToolCaller::System,
         "decide_think",
-        prompt);
+        prompt).get();
 
     if (!result.success)
         return; // Preserva a decisão heurística.

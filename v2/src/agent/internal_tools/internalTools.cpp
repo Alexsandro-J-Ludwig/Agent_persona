@@ -4,80 +4,42 @@
 #include <chrono>
 #include <thread>
 
-ToolResult InternalTools::executeModelTool(
-    std::string_view name,
-    const std::string &arguments)
-{
-    ToolResult result = execute(ToolCaller::Model, name, arguments);
-
-    return result;
-}
-
-ToolResult InternalTools::executeSystemTool(
-    std::string_view name,
-    const std::string &arguments)
-{
-    ToolResult result = execute(ToolCaller::System, name, arguments);
-
-    return result;
-}
-
-bool InternalTools::isAuthorized(
-    ToolCaller caller,
-    std::string_view name) const
-{
-    static const std::unordered_set<std::string> systemTools = {
-        "decide_think",
-        "validate_response",
-        "evaluate_complexity",
-        "audioPlayer",
-        "compressor"};
-
-    static const std::unordered_set<std::string> modelTools = {
-        "calculator"};
-
-    const auto &allowedTools =
-        (caller == ToolCaller::System)
-            ? systemTools
-            : modelTools;
-
-    return allowedTools.contains(std::string(name));
-}
-
 InternalTools::json InternalTools::getSchema() const
 {
     return json::array({ToolSchemas::calculator()});
 }
 
-ToolResult InternalTools::execute(
+std::future<ToolResult> InternalTools::execute(
     ToolCaller caller,
     std::string_view name,
     const std::string &arguments)
 {
-    if (!isAuthorized(caller, name))
+    for (const auto tool : TOOLS)
     {
-        return {
-            false,
-            "",
-            "Ferramenta não autorizada"};
+        if (name != tool.name)
+            continue;
+
+        if (tool.caller != caller)
+        {
+            return std::async(std::launch::deferred, []() -> ToolResult
+                              { return {
+                                    false,
+                                    "",
+                                    "Ferrmaneta não autorizada"}; });
+        }
+
+        return std::async(
+            std::launch::async,
+            [this, handler = tool.handler,
+             args = arguments]()
+            {
+                return (this->*handler)(args);
+            });
     }
 
-    if (name == "decide_think")
-        return decideThink(arguments);
-
-    if (name == "compressor")
-        return compressor(arguments);
-
-    if (name == "audioPlayer")
-        return audioPlayer(arguments);
-
-    if (name == "calculator") 
-        return calculator(arguments);
-
-    return {
-        false,
-        "",
-        "Ferramenta não implementada"};
+    return std::async(std::launch::deferred, []
+                      { return ToolResult{
+                            false, "", "Ferramenta não autorizada"}; });
 }
 
 ToolResult InternalTools::decideThink(const std::string &prompt)
@@ -359,4 +321,9 @@ ToolResult InternalTools::calculator(const std::string &arguments)
     {
         return {false, "", error.what()};
     }
+}
+
+ToolResult InternalTools::searchFile(const std::string &arguments)
+{
+    return {false, "", "Ferramenta ainda não implementada."};
 }

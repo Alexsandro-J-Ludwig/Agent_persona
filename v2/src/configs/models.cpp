@@ -1,40 +1,40 @@
 #include "models.h"
 
 const std::array<Model, MODEL_COUNT> MODEL_LIST =
+    /*
+        // =========== LOCAL =================
+        {{{
+              "Qwen3.5-9B:latest",
+              ModelRole::Agent,
+              ModelBackend::LlmServer,
+              32768,
+              16384,
+              30 * MINUTE,
+          },
+          {"Mixtral-8x7B:latest",
+           ModelRole::Think,
+           ModelBackend::LlmServer,
+           32768,
+           16384,
+           0},
+    */
 
-    // =========== LOCAL =================
+    // ============ REMOTE ==================
     {{{
-          "Qwen3.5-9B:latest",
+          "qwen3-30b-a3b:latest",
           ModelRole::Agent,
-          ModelBackend::Ollama,
-          32768,
+          ModelBackend::LlmServer,
+          32768, // Depracted
           16384,
-          30 * MINUTE,
+          30 * MINUTE, // Depracted
       },
-      {"Mixtral-8x7B:latest",
+      {"qwen3-next-80b-a3b-thinking:latest",
        ModelRole::Think,
-       ModelBackend::Ollama,
+       ModelBackend::LlmServer,
        32768,
        16384,
        0},
 
-      /*
-          // ============ REMOTE ==================
-          {{{
-                "qwen3-30b-a3b:latest",
-                ModelRole::Agent,
-                ModelBackend::Ollama,
-                32768,
-                16384,
-                30 * MINUTE,
-            },
-            {"qwen3-next-80b-a3b-thinking:latest",
-             ModelRole::Think,
-             ModelBackend::Ollama,
-             32768,
-             16384,
-             0},
-             */
       {"libs/piper/piper-models/pt_BR-faber-medium.onnx",
        ModelRole::TTS,
        ModelBackend::TTSService,

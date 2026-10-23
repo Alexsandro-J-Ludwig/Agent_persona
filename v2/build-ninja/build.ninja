@@ -179,6 +179,15 @@ build CMakeFiles/agent.dir/src/agent/internal_tools/audio/ttsService.cpp.obj: CX
   OBJECT_FILE_DIR = CMakeFiles\agent.dir\src\agent\internal_tools\audio
   TARGET_SUPPORT_DIR = CMakeFiles\agent.dir
 
+build CMakeFiles/agent.dir/src/agent/tasks/taskManager.cpp.obj: CXX_COMPILER__agent_unscanned_ C$:/Users/homolog/Downloads/AI_test/v2/src/agent/tasks/taskManager.cpp || cmake_object_order_depends_target_agent
+  DEFINES = -DCPPHTTPLIB_OPENSSL_SUPPORT -DNOMINMAX -DWIN32_LEAN_AND_MEAN
+  DEP_FILE = CMakeFiles\agent.dir\src\agent\tasks\taskManager.cpp.obj.d
+  FLAGS = -std=c++20
+  INCLUDES = -IC:/Users/homolog/Downloads/AI_test/v2 -IC:/Users/homolog/Downloads/AI_test/v2/libs -IC:/Users/homolog/Downloads/AI_test/v2/build-ninja/_deps/md4c-src/src -IC:/Users/homolog/Downloads/AI_test/v2/build-ninja/_deps/fmt-src/include -isystem C:/Users/homolog/Downloads/AI_test/v2/build-ninja/_deps/ftxui-src/include
+  OBJECT_DIR = CMakeFiles\agent.dir
+  OBJECT_FILE_DIR = CMakeFiles\agent.dir\src\agent\tasks
+  TARGET_SUPPORT_DIR = CMakeFiles\agent.dir
+
 
 # =============================================================================
 # Link build statements for EXECUTABLE target agent
@@ -187,7 +196,7 @@ build CMakeFiles/agent.dir/src/agent/internal_tools/audio/ttsService.cpp.obj: CX
 #############################################
 # Link the executable agent.exe
 
-build agent.exe: CXX_EXECUTABLE_LINKER__agent_ CMakeFiles/agent.dir/src/main.cpp.obj CMakeFiles/agent.dir/src/configs/models.cpp.obj CMakeFiles/agent.dir/src/configs/dotenv.cpp.obj CMakeFiles/agent.dir/src/configs/httplibconfig.cpp.obj CMakeFiles/agent.dir/src/ollama/ollama.cpp.obj CMakeFiles/agent.dir/src/agent/orchestrator/agentOrchestrator.cpp.obj CMakeFiles/agent.dir/src/agent/orchestrator/speach/speach.cpp.obj CMakeFiles/agent.dir/src/agent/routing/router.cpp.obj CMakeFiles/agent.dir/src/agent/history/historyManager.cpp.obj CMakeFiles/agent.dir/src/chat/chat.cpp.obj CMakeFiles/agent.dir/src/terminal/terminal.cpp.obj CMakeFiles/agent.dir/src/markdown/markdownRenderer.cpp.obj CMakeFiles/agent.dir/src/markdown/markdownFtxui.cpp.obj CMakeFiles/agent.dir/src/agent/internal_tools/internalTools.cpp.obj CMakeFiles/agent.dir/src/agent/internal_tools/audio/ttsService.cpp.obj | _deps/fmt-build/libfmt.a _deps/md4c-build/src/libmd4c.a C$:/msys64/ucrt64/lib/libssl.dll.a C$:/msys64/ucrt64/lib/libcrypto.dll.a C$:/msys64/ucrt64/lib/libsndfile.dll.a _deps/ftxui-build/libftxui-component.a _deps/ftxui-build/libftxui-dom.a _deps/ftxui-build/libftxui-screen.a C$:/msys64/ucrt64/lib/libportaudio.dll.a || _deps/fmt-build/libfmt.a _deps/ftxui-build/libftxui-component.a _deps/ftxui-build/libftxui-dom.a _deps/ftxui-build/libftxui-screen.a _deps/md4c-build/src/libmd4c.a
+build agent.exe: CXX_EXECUTABLE_LINKER__agent_ CMakeFiles/agent.dir/src/main.cpp.obj CMakeFiles/agent.dir/src/configs/models.cpp.obj CMakeFiles/agent.dir/src/configs/dotenv.cpp.obj CMakeFiles/agent.dir/src/configs/httplibconfig.cpp.obj CMakeFiles/agent.dir/src/ollama/ollama.cpp.obj CMakeFiles/agent.dir/src/agent/orchestrator/agentOrchestrator.cpp.obj CMakeFiles/agent.dir/src/agent/orchestrator/speach/speach.cpp.obj CMakeFiles/agent.dir/src/agent/routing/router.cpp.obj CMakeFiles/agent.dir/src/agent/history/historyManager.cpp.obj CMakeFiles/agent.dir/src/chat/chat.cpp.obj CMakeFiles/agent.dir/src/terminal/terminal.cpp.obj CMakeFiles/agent.dir/src/markdown/markdownRenderer.cpp.obj CMakeFiles/agent.dir/src/markdown/markdownFtxui.cpp.obj CMakeFiles/agent.dir/src/agent/internal_tools/internalTools.cpp.obj CMakeFiles/agent.dir/src/agent/internal_tools/audio/ttsService.cpp.obj CMakeFiles/agent.dir/src/agent/tasks/taskManager.cpp.obj | _deps/fmt-build/libfmt.a _deps/md4c-build/src/libmd4c.a C$:/msys64/ucrt64/lib/libssl.dll.a C$:/msys64/ucrt64/lib/libcrypto.dll.a C$:/msys64/ucrt64/lib/libsndfile.dll.a _deps/ftxui-build/libftxui-component.a _deps/ftxui-build/libftxui-dom.a _deps/ftxui-build/libftxui-screen.a C$:/msys64/ucrt64/lib/libportaudio.dll.a || _deps/fmt-build/libfmt.a _deps/ftxui-build/libftxui-component.a _deps/ftxui-build/libftxui-dom.a _deps/ftxui-build/libftxui-screen.a _deps/md4c-build/src/libmd4c.a
   LINK_LIBRARIES = _deps/fmt-build/libfmt.a  _deps/md4c-build/src/libmd4c.a  C:/msys64/ucrt64/lib/libssl.dll.a  C:/msys64/ucrt64/lib/libcrypto.dll.a  C:/msys64/ucrt64/lib/libsndfile.dll.a  -lws2_32  -lcrypt32  _deps/ftxui-build/libftxui-component.a  _deps/ftxui-build/libftxui-dom.a  _deps/ftxui-build/libftxui-screen.a  C:/msys64/ucrt64/lib/libportaudio.dll.a  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32
   OBJECT_DIR = CMakeFiles\agent.dir
   POST_BUILD = cd .

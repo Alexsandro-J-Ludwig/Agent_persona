@@ -264,7 +264,7 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
     return vbox(std::move(entries))
     | focusPositionRelative(0.0f, scrollPosition)
     | vscroll_indicator
-    | frame
+    | yframe
     | flex; });
 
     // --------------------------------------------------------
