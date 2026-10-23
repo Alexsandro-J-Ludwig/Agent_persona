@@ -26,7 +26,26 @@ namespace ToolSchemas
                 }}
             }}
         };
-    }
+    };
+
+    inline nlohmann::json searchFiles()
+{
+    return {
+        {"type", "function"},      // <- estava vazio
+        {"function", {
+            {"name", "searchFiles"},
+            {"description", "Busca arquivos pelo nome na pasta do usuario."},
+            {"parameters", {
+                {"type", "object"},
+                {"properties", {
+                    {"termo", {{"type", "string"},
+                               {"description", "Parte do nome do arquivo (minimo 3 caracteres)"}}}
+                }},
+                {"required", nlohmann::json::array({"termo"})}
+            }}
+        }}
+    };
+}
 }
 
 #endif

@@ -1,5 +1,6 @@
 #include "ollama.h"
 
+#include <iostream>
 #include <stdexcept>
 
 Ollama::Ollama()
@@ -111,42 +112,51 @@ ChatResult Ollama::chatStream(
     if (!tools.empty())
         body["tools"] = tools;
 
-    std::string buffer;
+    std::string buffer;       // bytes recebidos que ainda não formaram uma linha completa
+    std::string rawHead;      // primeiros bytes da resposta, só para diagnosticar erro HTTP
     std::string responseText;
     json toolCalls = json::array();
 
-    auto receiver =
-        [&buffer, &responseText, &toolCalls, callback](const char *data, std::size_t lenght)
+    constexpr std::size_t kRawHeadMax = 4096;
+
+    auto processLine = [&](const std::string &line)
     {
-        buffer.append(data, lenght);
+        if (line.empty())
+            return;
+
+        json chunk = json::parse(line, nullptr, /*allow_exceptions=*/false);
+        if (chunk.is_discarded() || !chunk.is_object() || !chunk.contains("message"))
+            return;
+
+        const auto &message = chunk.at("message");
+
+        if (message.contains("tool_calls") && message.at("tool_calls").is_array())
+        {
+            for (const auto &call : message.at("tool_calls"))
+                toolCalls.push_back(call);
+        }
+
+        const std::string content = message.value("content", "");
+        if (!content.empty())
+        {
+            responseText += content;
+            if (callback)
+                callback(content);
+        }
+    };
+
+    auto receiver = [&](const char *data, std::size_t length)
+    {
+        if (rawHead.size() < kRawHeadMax)
+            rawHead.append(data, std::min(length, kRawHeadMax - rawHead.size()));
+
+        buffer.append(data, length);
 
         std::size_t pos;
-
         while ((pos = buffer.find('\n')) != std::string::npos)
         {
-            std::string line = buffer.substr(0, pos);
+            processLine(buffer.substr(0, pos));
             buffer.erase(0, pos + 1);
-
-            if (line.empty())
-                continue;
-
-            json chunk = json::parse(line);
-
-            if (chunk.contains("message"))
-            {
-                const auto &message = chunk.at("message");
-
-                if (message.contains("tool_calls") &&
-                    message.at("tool_calls").is_array())
-                {
-                    for (const auto &call : message.at("tool_calls"))
-                        toolCalls.push_back(call);
-                }
-
-                const auto content = message.value("content", "");
-                responseText += content;
-                callback(content);
-            }
         }
 
         return true;
@@ -171,8 +181,8 @@ ChatResult Ollama::chatStream(
     {
         std::cerr << "\n========== ERRO OLLAMA ==========\n"
                   << "[Ollama] HTTP: " << response->status << '\n'
-                  << "[Ollama] BODY: " << response->body << '\n'
-                  << "[Ollama] Origem: Ollama.cpp\n"
+                  << "[Ollama] BODY: " << (rawHead.empty() ? response->body : rawHead) << '\n'
+                  << "[Ollama] Origem: Ollama.cpp (chatStream)\n"
                   << "================================\n"
                   << std::flush;
 
@@ -181,27 +191,8 @@ ChatResult Ollama::chatStream(
             std::to_string(response->status));
     }
 
-    auto processLine = [&](const std::string &line)
-    {
-        if (line.empty())
-            return;
-        json chunk = json::parse(line);
-        if (!chunk.contains("message"))
-            return;
-
-        const auto &message = chunk.at("message");
-
-        if (message.contains("tool_calls") && message.at("tool_calls").is_array())
-            for (const auto &call : message.at("tool_calls"))
-                toolCalls.push_back(call);
-
-        const std::string content = message.value("content", "");
-        if (!content.empty())
-        {
-            responseText += content;
-            callback(content);
-        }
-    };
+    processLine(buffer);
+    buffer.clear();
 
     return {responseText, toolCalls};
 }

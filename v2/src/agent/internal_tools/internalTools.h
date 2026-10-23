@@ -58,14 +58,14 @@ private:
     ToolResult compressor(const std::string &arguments);
     ToolResult audioPlayer(const std::string &response);
     ToolResult calculator(const std::string &arguments);
-    ToolResult searchFile(const std::string &arguments);
+    ToolResult searchFiles(const std::string &arguments);
 
     inline static const std::array<ToolInfo, 5> TOOLS = {{
         {"decide_think", ToolCaller::System, &InternalTools::decideThink},
         {"audioPlayer", ToolCaller::System, &InternalTools::audioPlayer},
         {"compressor", ToolCaller::System, &InternalTools::compressor},
         {"calculator", ToolCaller::Model, &InternalTools::calculator},
-        {"searchFile", ToolCaller::Model, &InternalTools::searchFile},
+        {"searchFiles", ToolCaller::Model, &InternalTools::searchFiles},
     }};
 };
 

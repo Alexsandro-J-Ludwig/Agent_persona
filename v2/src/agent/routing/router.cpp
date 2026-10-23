@@ -58,29 +58,29 @@ std::pair<bool, std::string> Router::routeDecide(const std::string &prompt)
 {
     std::string texto = prompt;
 
-    if (auto pos = prompt.find("/fast") != std::string::npos)
+    if (prompt.find("/fast") != std::string::npos)
     {
         agent.model = ModelRole::Agent;
         agent.thinking = false;
 
-        texto.erase(pos, 5);
+        texto.erase(0, 5);
 
         return {true, texto};
     }
-    if (auto pos = prompt.find("/think") != std::string::npos)
+    if (prompt.find("/think") != std::string::npos)
     {
         agent.model = ModelRole::Think;
         agent.thinking = true;
 
-        texto.erase(pos, 6);
+        texto.erase(0, 6);
 
         return {true, texto};
     }
-    if (auto pos = prompt.find("/audio") != std::string::npos)
+    if (prompt.find("/audio") != std::string::npos)
     {
         agent.audio = !agent.audio;
 
-        texto.erase(pos, 6);
+        texto.erase(0, 6);
 
         if (texto.empty())
             return {false, ""};

@@ -6,7 +6,7 @@
 
 InternalTools::json InternalTools::getSchema() const
 {
-    return json::array({ToolSchemas::calculator()});
+    return json::array({ToolSchemas::calculator(), ToolSchemas::searchFiles()});
 }
 
 std::future<ToolResult> InternalTools::execute(
@@ -323,7 +323,62 @@ ToolResult InternalTools::calculator(const std::string &arguments)
     }
 }
 
-ToolResult InternalTools::searchFile(const std::string &arguments)
+ToolResult InternalTools::searchFiles(const std::string &arguments)
 {
-    return {false, "", "Ferramenta ainda não implementada."};
+    const auto termo = json::parse(arguments);
+
+#ifdef _WIN32
+    return {false, "", "Ferramenta ainda não implementada para Windows."};
+#else
+    std::string termo_str;
+    try
+    {
+        termo_str = json::parse(arguments).at("termo").get<std::string>();
+    }
+    catch (const std::exception &)
+    {
+        return {false, "", "Argumentos inválidos. Envie {\"termo\": \"texto\"}."};
+    }
+
+    if (termo_str.size() < 3 ||
+        termo_str.find_first_not_of(
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ._-") != std::string::npos)
+        return {false, "", "Termo inválido: use 3+ caracteres, só letras, números, espaço, '.', '-' ou '_'."};
+
+    std::string comando =
+        "timeout 5 find \"$HOME\" -maxdepth 6 -iname '*" + termo_str +
+        "*' 2>/dev/null | head -n 10";
+
+    std::array<char, 1128> buffer;
+    std::string resultado;
+
+    FILE *pipe = popen(comando.c_str(), "r");
+    if (!pipe)
+        return {
+            false,
+            "",
+            "Erro ao tentar executar o comando no sistema"};
+
+    while (fgets(buffer.data(), buffer.size(), pipe) != nullptr)
+    {
+        resultado += buffer.data();
+    }
+    pclose(pipe);
+
+    if (!resultado.empty() && resultado.back() == '\n')
+        resultado.pop_back();
+
+    if (resultado.empty())
+    {
+        return {
+            false,
+            "",
+            "Nenhum arquivo encontrado"};
+    }
+
+    return {
+        true,
+        resultado,
+        ""};
+#endif
 }
