@@ -27,7 +27,8 @@ struct SearchTerm
 class Router
 {
 public:
-    explicit Router(InternalTools &tool);
+    explicit Router(InternalTools &tools);
+    
     using json = nlohmann::json;
 
     std::tuple<ModelRole, bool, bool, std::string> route(const std::string &prompt);
@@ -38,7 +39,7 @@ private:
     std::pair<bool, std::string> routeDecide(const std::string &prompt);
 
     RoutingDecision agent;
-    InternalTools &tool;
+    InternalTools &tools;
 
     std::vector<SearchTerm> busca = {
         // =====================================================

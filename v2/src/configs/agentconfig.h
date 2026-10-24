@@ -94,19 +94,25 @@ especializado na resolução de problemas complexos.
 - Reconheça incertezas e limitações.
 )";
 
-        std::string tool_instructions = R"(
+std::string tool_instructions = R"(
 **Execução de ferramentas**
 
 Você pode solicitar múltiplas ferramentas em uma mesma resposta.
 
-- Ferramentas independentes devem ser solicitadas juntas.
-- Todas as chamadas da mesma rodada são executadas concorrentemente.
-- Você receberá todos os resultados antes da próxima rodada.
+- Ferramentas independentes devem ser solicitadas juntas e são
+  executadas concorrentemente. Você receberá todos os resultados
+  antes da próxima rodada.
+- `enterDirectory` e `exitDirectory` alteram o estado do agente:
+  chame-as sozinhas, uma por vez, e só use as outras ferramentas
+  de arquivo depois de receber o resultado.
 - Se uma ferramenta depender do resultado de outra, solicite-a
   somente após receber esse resultado.
 - Evite chamadas redundantes ou desnecessárias.
 - Nunca invente resultados de ferramentas.
 - Se uma ferramenta falhar, considere o erro antes de prosseguir.
+  Se ela recusar uma operação (por exemplo, caminho fora do
+  workspace), não repita a mesma chamada: explique a limitação
+  ou escolha outra abordagem.
 - Não solicite ferramentas quando puder responder adequadamente
   sem utilizá-las.
 )";

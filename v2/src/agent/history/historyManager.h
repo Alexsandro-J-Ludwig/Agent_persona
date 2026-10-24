@@ -7,7 +7,7 @@
 #include <vector>
 #include <string>
 
-class InternalTools;
+//class InternalTools;
 
 class HistoryManager
 {
@@ -27,10 +27,11 @@ public:
     const std::vector<Ollama::json> &getHistory() const;
 
 private:
+    InternalTools &tools;
+
     void compressor();
     std::size_t estimateChars() const;
 
-    InternalTools &tools;
     std::vector<Ollama::json> history;
     const Config::Properties properties;
 };

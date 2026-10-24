@@ -1,12 +1,62 @@
 #include "internalTools.h"
 #include "tool_schemas.h"
 
+#include <algorithm>
+#include <cctype>
 #include <chrono>
-#include <thread>
+#include <filesystem>
+#include <format>
+#include <vector>
+
+// InternalTools::json InternalTools::getSchema() const
+// {
+//     json schemas = json::array();
+
+//     for (const auto &schema : ToolSchemas::all())
+//     {
+//         const auto &function = schema.at("function");  
+//         const std::string name = function.at("name").get<std::string>(); 
+
+//         json properties = json::object();
+//         json required = json::array();
+
+//         if (name == "listTool")
+//         {
+//             properties = function.at("parameters").at("properties");
+//             required = function.at("parameters").at("required");
+//         }
+
+//         schemas.push_back(json::object({
+//             {"type", "function"},
+//             {"function", json::object({
+//                 {"name", name},
+//                 {"description", function.at("description")},
+//                 {"parameters", json::object({
+//                     {"type", "object"},
+//                     {"properties", properties},
+//                     {"required", required}
+//                 })}
+//             })}
+//         }));
+//     }
+
+//     return schemas;
+// }
 
 InternalTools::json InternalTools::getSchema() const
 {
-    return json::array({ToolSchemas::calculator(), ToolSchemas::searchFiles()});
+    return ToolSchemas::all();
+}
+
+static std::string parametersOf(const std::string &toolName)
+{
+    for (const auto &schema : ToolSchemas::all())
+    {
+        const auto &fn = schema.at("function");
+        if (fn.at("name").get<std::string>() == toolName)
+            return fn.at("parameters").dump();
+    }
+    return "{}";
 }
 
 std::future<ToolResult> InternalTools::execute(
@@ -14,7 +64,7 @@ std::future<ToolResult> InternalTools::execute(
     std::string_view name,
     const std::string &arguments)
 {
-    for (const auto tool : TOOLS)
+    for (const auto &tool : TOOLS)
     {
         if (name != tool.name)
             continue;
@@ -31,15 +81,26 @@ std::future<ToolResult> InternalTools::execute(
         return std::async(
             std::launch::async,
             [this, handler = tool.handler,
-             args = arguments]()
+             args = arguments, toolName = tool.name]() -> ToolResult
             {
-                return (this->*handler)(args);
+                ToolResult result = (this->*handler)(args);
+
+                if (!result.success &&
+                    (result.error.find("json.exception") != std::string::npos ||
+                     result.error.find("Argumenntos inválidos", 0) == 0))
+                {
+                    result.error = "Invalid arguments for '" + toolName +
+                                   "'. Expected parameters: " + parametersOf(toolName) +
+                                   ". Details: " + result.error;
+                }
+
+                return result;
             });
     }
 
     return std::async(std::launch::deferred, []
                       { return ToolResult{
-                            false, "", "Ferramenta não autorizada"}; });
+                            false, "", "Ferramenta não encontrada"}; });
 }
 
 ToolResult InternalTools::decideThink(const std::string &prompt)
@@ -246,7 +307,7 @@ INCERTEZAS E INFORMAÇÕES NÃO FORNECIDAS
 {}
 </history>
 )",
-                                     history.dump(2));
+                                     history.dump(2, ' ', false, Ollama::json::error_handler_t::replace));
 
     constexpr int maxAttempts = 3;
 
@@ -323,62 +384,260 @@ ToolResult InternalTools::calculator(const std::string &arguments)
     }
 }
 
+InternalTools::InternalTools(const fs::path &root)
+    : rootDirectory(fs::canonical(root)), currentDirectory(rootDirectory)
+{
+}
+
+bool InternalTools::isInside(const fs::path &root, const fs::path &candidate)
+{
+    const auto rel = candidate.lexically_relative(root);
+    return !rel.empty() && *rel.begin() != "..";
+}
+
+fs::path InternalTools::getCurrentDirectory()
+{
+    std::lock_guard<std::mutex> lock(directoryMutex);
+    return currentDirectory;
+}
+
+std::optional<fs::path> InternalTools::resolveInsideRoot(const std::string &path,
+                                                         const fs::path &base) const
+{
+    std::error_code ec;
+    const fs::path resolved = fs::weakly_canonical(base / fs::path(path), ec);
+    if (ec || !isInside(rootDirectory, resolved))
+        return std::nullopt;
+    return resolved;
+}
+
 ToolResult InternalTools::searchFiles(const std::string &arguments)
 {
-    const auto termo = json::parse(arguments);
-
-#ifdef _WIN32
-    return {false, "", "Ferramenta ainda não implementada para Windows."};
-#else
-    std::string termo_str;
+    std::string term;
     try
     {
-        termo_str = json::parse(arguments).at("termo").get<std::string>();
+        term = json::parse(arguments).at("termo").get<std::string>();
     }
     catch (const std::exception &)
     {
         return {false, "", "Argumentos inválidos. Envie {\"termo\": \"texto\"}."};
     }
 
-    if (termo_str.size() < 3 ||
-        termo_str.find_first_not_of(
-            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ._-") != std::string::npos)
-        return {false, "", "Termo inválido: use 3+ caracteres, só letras, números, espaço, '.', '-' ou '_'."};
+    if (term.size() < 3)
+        return {false, "", "Termo inválido: use 3+ caracteres."};
 
-    std::string comando =
-        "timeout 5 find \"$HOME\" -maxdepth 6 -iname '*" + termo_str +
-        "*' 2>/dev/null | head -n 10";
-
-    std::array<char, 1128> buffer;
-    std::string resultado;
-
-    FILE *pipe = popen(comando.c_str(), "r");
-    if (!pipe)
-        return {
-            false,
-            "",
-            "Erro ao tentar executar o comando no sistema"};
-
-    while (fgets(buffer.data(), buffer.size(), pipe) != nullptr)
+    const auto toLower = [](std::string s)
     {
-        resultado += buffer.data();
-    }
-    pclose(pipe);
+        std::transform(s.begin(), s.end(), s.begin(),
+                       [](unsigned char c)
+                       { return static_cast<char>(std::tolower(c)); });
+        return s;
+    };
+    const std::string needle = toLower(term);
 
-    if (!resultado.empty() && resultado.back() == '\n')
-        resultado.pop_back();
+    constexpr int maxDepth = 5;
+    constexpr std::size_t maxResults = 10;
 
-    if (resultado.empty())
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(5);
+
+    std::string result;
+    std::size_t found = 0;
+    std::error_code ec;
+
+    fs::recursive_directory_iterator it(
+        rootDirectory, fs::directory_options::skip_permission_denied, ec);
+    const fs::recursive_directory_iterator end;
+
+    while (!ec && it != end && found < maxResults)
     {
-        return {
-            false,
-            "",
-            "Nenhum arquivo encontrado"};
+        if (std::chrono::steady_clock::now() > deadline)
+            break;
+
+        const auto &entry = *it;
+
+        if (toLower(entry.path().filename().string()).find(needle) != std::string::npos)
+        {
+            result += entry.path().string() + "\n";
+            ++found;
+        }
+
+        if (it.depth() >= maxDepth)
+            it.disable_recursion_pending();
+
+        it.increment(ec);
     }
 
-    return {
-        true,
-        resultado,
-        ""};
-#endif
+    if (result.empty())
+        return {false, "", "Nenhum arquivo encontrado"};
+
+    if (result.back() == '\n')
+        result.pop_back();
+
+    return {true, result, ""};
 }
+
+ToolResult InternalTools::listDirectory(const std::string &argumennts)
+{
+    try
+    {
+        const auto args = json::parse(argumennts);
+        const std::string pathStr = args.value("path", ".");
+
+        const auto target = resolveInsideRoot(pathStr, getCurrentDirectory());
+        if (!target)
+            return {false, "", "Path is outside the allowed workspace"};
+
+        if (!fs::exists(*target))
+            return {false, "", "Path not found"};
+
+        if (!fs::is_directory(*target))
+            return {false, "", "This path is not a directory"};
+
+        std::vector<std::string> entries;
+
+        for (const auto &entrada : fs::directory_iterator(
+                 *target, fs::directory_options::skip_permission_denied))
+        {
+            std::string name = entrada.path().filename().string();
+            if (entrada.is_directory())
+                name += '/';
+            entries.push_back(std::move(name));
+        }
+        std::sort(entries.begin(), entries.end());
+
+        constexpr std::size_t maxEntries = 200;
+
+        std::string result = target->string() + "\n";
+        for (std::size_t i = 0; i < entries.size() && i < maxEntries; ++i)
+            result += entries[i] + "\n";
+
+        if (entries.size() > maxEntries)
+            result += std::format("... e mais {} itens\n", entries.size() - maxEntries);
+
+        return {
+            true,
+            result,
+            ""};
+    }
+    catch (const std::exception &e)
+    {
+        return {
+            false,
+            "",
+            e.what()};
+    }
+}
+
+ToolResult InternalTools::enterDirectory(const std::string &arguments)
+{
+    try
+    {
+        const auto &args = json::parse(arguments);
+        const auto path = args.at("path").get<std::string>();
+
+        std::lock_guard<std::mutex> lock(directoryMutex);
+
+        const auto target = resolveInsideRoot(path, currentDirectory);
+        if (!target)
+            return {false, "", "Path is outside the allowed workspace"};
+
+        if (!std::filesystem::exists(*target))
+            return {
+                false,
+                "",
+                "Directory was not found"};
+
+        if (!std::filesystem::is_directory(*target))
+            return {
+                false,
+                "",
+                "This is not a directory"};
+
+        currentDirectory = *target;
+
+        return {
+            true,
+            currentDirectory.string(),
+            ""};
+    }
+    catch (const std::exception &e)
+    {
+        return {false, "", e.what()};
+    }
+}
+
+ToolResult InternalTools::exitDirectory(const std::string &)
+{
+    try
+    {
+        std::lock_guard<std::mutex> lock(directoryMutex);
+
+        if (currentDirectory == rootDirectory)
+            return {false, "", "Already at the workspace root"};
+
+        currentDirectory = currentDirectory.parent_path();
+
+        return {true, currentDirectory.string(), ""};
+    }
+    catch (const std::exception &e)
+    {
+        return {false, "", e.what()};
+    }
+}
+
+// ToolResult InternalTools::listTool(const std::string &arguments)
+// {
+//     try
+//     {
+//         const auto &args = json::parse(arguments);
+//         const auto tool_name =
+//             args.at("tool_name").get<std::string>();
+
+//         for (const auto &tool : ToolSchemas::all())
+//         {
+//             const auto &function = tool.at("function");
+
+//             if (function.at("name").get<std::string>() == tool_name)
+//             {
+//                 return {
+//                     true,
+//                     function.at("parameters").dump(),
+//                     ""};
+//             }
+//         }
+
+//         return {
+//             false,
+//             "",
+//             "Tool was not found"};
+//     }
+//     catch (const std::exception &e)
+//     {
+//         return {
+//             false,
+//             "",
+//             e.what()};
+//     }
+// }
+
+// ToolResult InternalTools::plan(const std::string &arguments)
+// {
+//     try
+//     {
+//         const auto &request = json::parse(arguments);
+//         const Model &thinkModel = getModel(ModelRole::Think);
+
+//         std::string prompt = std::format(R"(
+//             You are a agent tool for plan the TaskList
+
+
+//             )")
+        
+//     }
+//     catch(const std::exception& e)
+//     {
+//         std::cerr << e.what() << '\n';
+//     }
+    
+// }

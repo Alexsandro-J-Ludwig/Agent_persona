@@ -36,7 +36,8 @@ std::string Orquestrador::run(
     bool thinking,
     bool audio,
     Ollama::StreamCallback onChunk,
-    ToolCallback onTool)
+    ToolCallback onTool
+)
 {
     const Model &model = getModel(role);
 
