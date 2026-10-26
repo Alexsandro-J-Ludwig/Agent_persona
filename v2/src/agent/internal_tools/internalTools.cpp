@@ -3,45 +3,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <chrono>
-#include <filesystem>
-#include <format>
-#include <vector>
-
-// InternalTools::json InternalTools::getSchema() const
-// {
-//     json schemas = json::array();
-
-//     for (const auto &schema : ToolSchemas::all())
-//     {
-//         const auto &function = schema.at("function");  
-//         const std::string name = function.at("name").get<std::string>(); 
-
-//         json properties = json::object();
-//         json required = json::array();
-
-//         if (name == "listTool")
-//         {
-//             properties = function.at("parameters").at("properties");
-//             required = function.at("parameters").at("required");
-//         }
-
-//         schemas.push_back(json::object({
-//             {"type", "function"},
-//             {"function", json::object({
-//                 {"name", name},
-//                 {"description", function.at("description")},
-//                 {"parameters", json::object({
-//                     {"type", "object"},
-//                     {"properties", properties},
-//                     {"required", required}
-//                 })}
-//             })}
-//         }));
-//     }
-
-//     return schemas;
-// }
 
 InternalTools::json InternalTools::getSchema() const
 {
@@ -384,182 +345,249 @@ ToolResult InternalTools::calculator(const std::string &arguments)
     }
 }
 
-InternalTools::InternalTools(const fs::path &root)
-    : rootDirectory(fs::canonical(root)), currentDirectory(rootDirectory)
+#ifdef _WIN32
+static bool containsInsensitive(
+    const std::wstring &name,
+    const std::wstring &term)
 {
-}
+    if (term.empty())
+        return true;
 
-bool InternalTools::isInside(const fs::path &root, const fs::path &candidate)
-{
-    const auto rel = candidate.lexically_relative(root);
-    return !rel.empty() && *rel.begin() != "..";
-}
+    if (term.size() > name.size())
+        return false;
 
-fs::path InternalTools::getCurrentDirectory()
-{
-    std::lock_guard<std::mutex> lock(directoryMutex);
-    return currentDirectory;
-}
+    for (std::size_t i = 0;
+         i + term.size() <= name.size(); ++i)
+    {
+        if (CompareStringOrdinal(
+                name.c_str() + i,
+                static_cast<int>(term.size()),
+                term.c_str(),
+                static_cast<int>(term.size()),
+                TRUE) == CSTR_EQUAL)
+        {
+            return true;
+        }
+    }
 
-std::optional<fs::path> InternalTools::resolveInsideRoot(const std::string &path,
-                                                         const fs::path &base) const
-{
-    std::error_code ec;
-    const fs::path resolved = fs::weakly_canonical(base / fs::path(path), ec);
-    if (ec || !isInside(rootDirectory, resolved))
-        return std::nullopt;
-    return resolved;
+    return false;
 }
+#endif
 
 ToolResult InternalTools::searchFiles(const std::string &arguments)
 {
     std::string term;
+
     try
     {
-        term = json::parse(arguments).at("termo").get<std::string>();
+        term = json::parse(arguments)
+                   .at("termo")
+                   .get<std::string>();
+    }
+    catch (const std::exception &)
+    {
+        return {
+            false, "",
+            "Argumentos inválidos. Envie {\"termo\":\"texto\"}."};
+    }
+
+    if (term.empty())
+        return {false, "", "Termo de pesquisa vazio."};
+
+#ifdef _WIN32
+    const fs::path termPath = fs::u8path(term);
+    const std::wstring needle = termPath.wstring();
+
+    const DWORD drives = GetLogicalDrives();
+
+    if (drives == 0)
+        return {false, "", "Não foi possível enumerar os discos."};
+
+    std::string result;
+    std::size_t found = 0;
+
+    constexpr std::size_t maxStoredResults = 100;
+
+    for (int i = 0; i < 26; ++i)
+    {
+        if (!(drives & (1UL << i)))
+            continue;
+
+        const wchar_t letter = static_cast<wchar_t>(L'A' + i);
+        const std::wstring root =
+            std::wstring(1, letter) + L":\\";
+
+        const UINT driveType = GetDriveTypeW(root.c_str());
+
+        if (driveType == DRIVE_NO_ROOT_DIR ||
+            driveType == DRIVE_UNKNOWN ||
+            driveType == DRIVE_CDROM)
+        {
+            continue;
+        }
+
+        std::vector<fs::path> pending{fs::path(root)};
+        while (!pending.empty())
+        {
+            fs::path directory = std::move(pending.back());
+            pending.pop_back();
+            std::error_code ec;
+            fs::directory_iterator it(
+                directory, fs::directory_options::skip_permission_denied, ec);
+            const fs::directory_iterator end;
+            if (ec)
+                continue;
+
+            while (it != end)
+            {
+                const fs::path path = it->path();
+                if (containsInsensitive(path.filename().wstring(), needle))
+                {
+                    const auto pathUtf8 = path.u8string();
+                    result.append(reinterpret_cast<const char *>(pathUtf8.data()),
+                                  pathUtf8.size());
+                    result += '\n';
+                    if (++found >= maxStoredResults)
+                    {
+                        result.pop_back();
+                        return {true, result, ""};
+                    }
+                }
+
+                const DWORD attributes = GetFileAttributesW(path.c_str());
+                if (attributes != INVALID_FILE_ATTRIBUTES &&
+                    (attributes & FILE_ATTRIBUTE_DIRECTORY) &&
+                    !(attributes & FILE_ATTRIBUTE_REPARSE_POINT))
+                    pending.push_back(path);
+
+                it.increment(ec);
+                if (ec)
+                    break;
+            }
+        }
+    }
+
+    if (found == 0)
+        return {false, "", "Nenhum arquivo encontrado nos diretórios acessíveis."};
+
+    if (!result.empty() && result.back() == '\n')
+        result.pop_back();
+
+    return {true, result, ""};
+
+#else
+    std::string termo_str;
+    try
+    {
+        termo_str = json::parse(arguments).at("termo").get<std::string>();
     }
     catch (const std::exception &)
     {
         return {false, "", "Argumentos inválidos. Envie {\"termo\": \"texto\"}."};
     }
 
-    if (term.size() < 3)
-        return {false, "", "Termo inválido: use 3+ caracteres."};
+    if (termo_str.size() < 3 ||
+        termo_str.find_first_not_of(
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ._-") != std::string::npos)
+        return {false, "", "Termo inválido: use 3+ caracteres, só letras, números, espaço, '.', '-' ou '_'."};
 
-    const auto toLower = [](std::string s)
-    {
-        std::transform(s.begin(), s.end(), s.begin(),
-                       [](unsigned char c)
-                       { return static_cast<char>(std::tolower(c)); });
-        return s;
-    };
-    const std::string needle = toLower(term);
+    std::string comando =
+        "find / \\( -path /proc -o -path /sys -o -path /dev -o -path /run \\) -prune -o -iname '*" + termo_str +
+        "*' -print 2>/dev/null | head -n 10";
 
-    constexpr int maxDepth = 5;
-    constexpr std::size_t maxResults = 10;
+    std::array<char, 1128> buffer;
+    std::string resultado;
 
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(5);
-
-    std::string result;
-    std::size_t found = 0;
-    std::error_code ec;
-
-    fs::recursive_directory_iterator it(
-        rootDirectory, fs::directory_options::skip_permission_denied, ec);
-    const fs::recursive_directory_iterator end;
-
-    while (!ec && it != end && found < maxResults)
-    {
-        if (std::chrono::steady_clock::now() > deadline)
-            break;
-
-        const auto &entry = *it;
-
-        if (toLower(entry.path().filename().string()).find(needle) != std::string::npos)
-        {
-            result += entry.path().string() + "\n";
-            ++found;
-        }
-
-        if (it.depth() >= maxDepth)
-            it.disable_recursion_pending();
-
-        it.increment(ec);
-    }
-
-    if (result.empty())
-        return {false, "", "Nenhum arquivo encontrado"};
-
-    if (result.back() == '\n')
-        result.pop_back();
-
-    return {true, result, ""};
-}
-
-ToolResult InternalTools::listDirectory(const std::string &argumennts)
-{
-    try
-    {
-        const auto args = json::parse(argumennts);
-        const std::string pathStr = args.value("path", ".");
-
-        const auto target = resolveInsideRoot(pathStr, getCurrentDirectory());
-        if (!target)
-            return {false, "", "Path is outside the allowed workspace"};
-
-        if (!fs::exists(*target))
-            return {false, "", "Path not found"};
-
-        if (!fs::is_directory(*target))
-            return {false, "", "This path is not a directory"};
-
-        std::vector<std::string> entries;
-
-        for (const auto &entrada : fs::directory_iterator(
-                 *target, fs::directory_options::skip_permission_denied))
-        {
-            std::string name = entrada.path().filename().string();
-            if (entrada.is_directory())
-                name += '/';
-            entries.push_back(std::move(name));
-        }
-        std::sort(entries.begin(), entries.end());
-
-        constexpr std::size_t maxEntries = 200;
-
-        std::string result = target->string() + "\n";
-        for (std::size_t i = 0; i < entries.size() && i < maxEntries; ++i)
-            result += entries[i] + "\n";
-
-        if (entries.size() > maxEntries)
-            result += std::format("... e mais {} itens\n", entries.size() - maxEntries);
-
+    FILE *pipe = popen(comando.c_str(), "r");
+    if (!pipe)
         return {
-            true,
-            result,
-            ""};
+            false,
+            "",
+            "Erro ao tentar executar o comando no sistema"};
+
+    while (fgets(buffer.data(), buffer.size(), pipe) != nullptr)
+    {
+        resultado += buffer.data();
     }
-    catch (const std::exception &e)
+    pclose(pipe);
+
+    if (!resultado.empty() && resultado.back() == '\n')
+        resultado.pop_back();
+
+    if (resultado.empty())
     {
         return {
             false,
             "",
-            e.what()};
+            "Nenhum arquivo encontrado nos diretórios acessíveis."};
     }
+
+    return {
+        true,
+        resultado,
+        ""};
+#endif
 }
 
-ToolResult InternalTools::enterDirectory(const std::string &arguments)
+ToolResult InternalTools::listDirectory(const std::string &arguments)
 {
     try
     {
-        const auto &args = json::parse(arguments);
-        const auto path = args.at("path").get<std::string>();
+        const auto args = json::parse(arguments);
 
-        std::lock_guard<std::mutex> lock(directoryMutex);
+        const std::string pathStr =
+            args.value("path", ".");
 
-        const auto target = resolveInsideRoot(path, currentDirectory);
-        if (!target)
-            return {false, "", "Path is outside the allowed workspace"};
+        std::error_code ec;
 
-        if (!std::filesystem::exists(*target))
-            return {
-                false,
-                "",
-                "Directory was not found"};
+        const fs::path target = fs::weakly_canonical(
+            fs::u8path(pathStr), ec);
 
-        if (!std::filesystem::is_directory(*target))
-            return {
-                false,
-                "",
-                "This is not a directory"};
+        if (ec)
+            return {false, "", ec.message()};
 
-        currentDirectory = *target;
+        if (!fs::exists(target, ec) || ec)
+            return {false, "", "Diretório não encontrado."};
 
-        return {
-            true,
-            currentDirectory.string(),
-            ""};
+        if (!fs::is_directory(target, ec) || ec)
+            return {false, "", "O caminho não é um diretório."};
+
+        std::string result;
+
+        auto appendPath = [&result](const fs::path &path)
+        {
+            const auto utf8 = path.u8string();
+
+            result.append(
+                reinterpret_cast<const char *>(utf8.data()),
+                utf8.size());
+
+            result += '\n';
+        };
+
+        appendPath(target);
+
+        fs::recursive_directory_iterator it(
+            target,
+            fs::directory_options::skip_permission_denied,
+            ec);
+
+        const fs::recursive_directory_iterator end;
+
+        if (ec)
+            return {false, "", ec.message()};
+
+        while (it != end)
+        {
+            appendPath(it->path());
+
+            it.increment(ec);
+
+            if (ec)
+                ec.clear();
+        }
+
+        return {true, result, ""};
     }
     catch (const std::exception &e)
     {
@@ -567,77 +595,19 @@ ToolResult InternalTools::enterDirectory(const std::string &arguments)
     }
 }
 
-ToolResult InternalTools::exitDirectory(const std::string &)
+ToolResult InternalTools::readCode(const std::string &arguments)
 {
     try
     {
-        std::lock_guard<std::mutex> lock(directoryMutex);
+        const auto args = json::parse(arguments);
+        const std::string fileName =
+            args.at("file").get<std::string>();
 
-        if (currentDirectory == rootDirectory)
-            return {false, "", "Already at the workspace root"};
-
-        currentDirectory = currentDirectory.parent_path();
-
-        return {true, currentDirectory.string(), ""};
+        if (fs::exists(fileName))
+            return {false, "", "File not found"};
     }
     catch (const std::exception &e)
     {
-        return {false, "", e.what()};
+        std::cerr << e.what() << '\n';
     }
 }
-
-// ToolResult InternalTools::listTool(const std::string &arguments)
-// {
-//     try
-//     {
-//         const auto &args = json::parse(arguments);
-//         const auto tool_name =
-//             args.at("tool_name").get<std::string>();
-
-//         for (const auto &tool : ToolSchemas::all())
-//         {
-//             const auto &function = tool.at("function");
-
-//             if (function.at("name").get<std::string>() == tool_name)
-//             {
-//                 return {
-//                     true,
-//                     function.at("parameters").dump(),
-//                     ""};
-//             }
-//         }
-
-//         return {
-//             false,
-//             "",
-//             "Tool was not found"};
-//     }
-//     catch (const std::exception &e)
-//     {
-//         return {
-//             false,
-//             "",
-//             e.what()};
-//     }
-// }
-
-// ToolResult InternalTools::plan(const std::string &arguments)
-// {
-//     try
-//     {
-//         const auto &request = json::parse(arguments);
-//         const Model &thinkModel = getModel(ModelRole::Think);
-
-//         std::string prompt = std::format(R"(
-//             You are a agent tool for plan the TaskList
-
-
-//             )")
-        
-//     }
-//     catch(const std::exception& e)
-//     {
-//         std::cerr << e.what() << '\n';
-//     }
-    
-// }
