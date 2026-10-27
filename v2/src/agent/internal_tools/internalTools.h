@@ -13,8 +13,12 @@
 #include <vector>
 #include <json.hpp>
 #include <httplib.h>
+#include <algorithm>
+#include <cctype>
+#include <fstream>
 
 #include "src/configs/models.h"
+#include "src/configs/agentconfig.h"
 #include "src/ollama/ollama.h"
 #include "src/agent/internal_tools/audio/ttsService.h"
 
@@ -58,6 +62,10 @@ private:
     Ollama ollama;
     TTSService tts;
 
+    std::string parametersOf(const std::string &toolName) const;
+
+    static constexpr std::size_t MAX_BYTES = Config::Properties::max_bytes;
+
     ToolResult decideThink(const std::string &arguments);
     ToolResult compressor(const std::string &arguments);
     ToolResult audioPlayer(const std::string &response);
@@ -65,6 +73,7 @@ private:
     ToolResult searchFiles(const std::string &arguments);
     ToolResult listDirectory(const std::string &arguments);
     ToolResult readCode(const std::string &arguments);
+    ToolResult searchWeb(const std::string &arguments);
 
     inline static const std::array<ToolInfo, 9> TOOLS =
         {{{"decide_think", ToolCaller::System, &InternalTools::decideThink},
@@ -72,7 +81,8 @@ private:
           {"compressor", ToolCaller::System, &InternalTools::compressor},
           {"calculator", ToolCaller::Model, &InternalTools::calculator},
           {"searchFiles", ToolCaller::Model, &InternalTools::searchFiles},
-          {"listDirectory", ToolCaller::Model, &InternalTools::listDirectory}}};
+          {"listDirectory", ToolCaller::Model, &InternalTools::listDirectory},
+          {"readCode", ToolCaller::Model, &InternalTools::readCode}}};
 };
 
 #endif

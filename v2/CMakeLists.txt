@@ -136,6 +136,15 @@ add_executable(agent
     # Internal Tools
     src/agent/internal_tools/internalTools.cpp
 
+    # Tools
+    src/agent/internal_tools/impl/audioPlayer.cpp
+    src/agent/internal_tools/impl/calculator.cpp
+    src/agent/internal_tools/impl/compressor.cpp
+    src/agent/internal_tools/impl/decideThink.cpp
+    src/agent/internal_tools/impl/listDirectory.cpp
+    src/agent/internal_tools/impl/readCode.cpp
+    src/agent/internal_tools/impl/searchFiles.cpp
+
     # Internal Tools audio
     src/agent/internal_tools/audio/ttsService.cpp
 

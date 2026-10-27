@@ -20,11 +20,11 @@ const std::array<Model, MODEL_COUNT> MODEL_LIST =
           */
     // ============ REMOTE ==================
     {{{
-          "qwen3-30b-a3b:latest",
+          "qwen3.5-9B:latest",
           ModelRole::Agent,
           ModelBackend::LlmServer,
-          32768, // Depracted
-          16384,
+          262144, // Depracted
+          131032,
           30 * MINUTE, // Depracted
       },
       {"qwen3-next-80b-a3b-thinking:latest",

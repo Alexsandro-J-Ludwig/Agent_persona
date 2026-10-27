@@ -7,13 +7,12 @@
 
 namespace Config
 {
-    struct Properties
-    {
-        static constexpr std::size_t max_rounds = 8;
-        ;
-        std::size_t max_bytes = 50000;
+  struct Properties
+  {
+    static constexpr std::size_t max_rounds = 8;
+    static constexpr std::size_t max_bytes = 64 * 2048;
 
-        std::string agent_fast = R"(
+    std::string agent_fast = R"(
 Você é um assistente de IA local.
 
 **Tom e comunicação**
@@ -39,8 +38,8 @@ Você é um assistente de IA local.
 
 )";
 
-        // Agent - Thinking ON
-        std::string agent_think = R"(
+    // Agent - Thinking ON
+    std::string agent_think = R"(
 Você é um assistente de IA local com capacidade de raciocínio.
 
 Analise cuidadosamente a solicitação.
@@ -51,8 +50,8 @@ Evite explicações excessivamente longas.
 Reconheça quando não possuir informações suficientes.
 )";
 
-        // Think - Thinking OFF
-        std::string think_fast = R"(
+    // Think - Thinking OFF
+    std::string think_fast = R"(
 Você é um assistente de IA de alta capacidade.
 
 Resolva solicitações que exigem conhecimento técnico,
@@ -65,8 +64,8 @@ Não introduza complexidade desnecessária.
 Não invente informações ou resultados.
 )";
 
-        // Think - Thinking ON
-        std::string think_deep = R"(
+    // Think - Thinking ON
+    std::string think_deep = R"(
 Você é um assistente de IA de alta capacidade,
 especializado na resolução de problemas complexos.
 
@@ -94,7 +93,7 @@ especializado na resolução de problemas complexos.
 - Reconheça incertezas e limitações.
 )";
 
-std::string tool_instructions = R"(
+    std::string tool_instructions = R"(
 **Execução de ferramentas**
 
 Você pode solicitar múltiplas ferramentas em uma mesma resposta.
@@ -117,22 +116,22 @@ Você pode solicitar múltiplas ferramentas em uma mesma resposta.
   sem utilizá-las.
 )";
 
-        std::string getSystemPrompt(ModelRole role, bool thinking, bool toolsEnabled) const
-        {
-            const auto &base = getSystemPrompt(role, thinking);
-            return toolsEnabled ? base + tool_instructions : base;
-        }
+    std::string getSystemPrompt(ModelRole role, bool thinking, bool toolsEnabled) const
+    {
+      const auto &base = getSystemPrompt(role, thinking);
+      return toolsEnabled ? base + tool_instructions : base;
+    }
 
-        const std::string &getSystemPrompt(
-            ModelRole role,
-            bool thinking) const
-        {
-            if (role == ModelRole::Agent)
-                return thinking ? agent_think : agent_fast;
+    const std::string &getSystemPrompt(
+        ModelRole role,
+        bool thinking) const
+    {
+      if (role == ModelRole::Agent)
+        return thinking ? agent_think : agent_fast;
 
-            return thinking ? think_deep : think_fast;
-        }
-    };
+      return thinking ? think_deep : think_fast;
+    }
+  };
 
 }
 

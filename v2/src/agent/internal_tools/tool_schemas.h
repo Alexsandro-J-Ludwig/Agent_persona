@@ -64,11 +64,28 @@ namespace ToolSchemas
             json::object({{"path", prop("string", "Directory to list, relative to the current directory or absolute inside the workspace.")}}));
     }
 
+    inline json readCode()
+    {
+        return makeTool(
+            "readCode",
+            "Reads a source code file (.py, .cpp, .hpp, .h, .java, .rs, .c, .cs) and returns "
+            "its lines numbered as 'N: text'. The first line of the result reports total_lines "
+            "and whether the output was truncated. Use init and ends (1-based, inclusive) to read "
+            "a specific range; if the output is truncated, call again with init set to the next "
+            "unread line. Args: filePath (string, required), init (integer, optional, default 1), "
+            "ends (integer, optional, default end of file).",
+            json::object({{"filePath", prop("string", "Path to the code file.")},
+                          {"init", prop("integer", "First line to read (1-based). Optional, defaults to 1.")},
+                          {"ends", prop("integer", "Last line to read (inclusive). Optional, defaults to end of file.")}}),
+            json::array({"filePath"}));
+    }
+
     inline const json &all()
     {
         static const json schemas = json::array({calculator(),
                                                  searchFiles(),
-                                                 listDirectory()});
+                                                 listDirectory(),
+                                                 readCode()});
         return schemas;
     }
 }
