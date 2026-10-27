@@ -106,3 +106,9 @@ void Orquestrador::setAudioEnabled(bool enabled)
         speech.wait();
     }
 }
+
+// ====== REPASSA O OBSERVADOR SEM CONHECER O TERMINAL ======
+void Orquestrador::setSpeechCallback(Speach::Speaker callback)
+{
+    speech.setPhraseCallback(std::move(callback));
+}

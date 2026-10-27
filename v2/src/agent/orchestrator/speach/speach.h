@@ -26,6 +26,8 @@ public:
     void flush();
     void cancelPending();
     std::string lastError() const;
+    // ====== OBSERVADOR DAS FRASES ENVIADAS AO TTS ======
+    void setPhraseCallback(Speaker callback);
 
 private:
     void consume();
@@ -35,6 +37,7 @@ private:
     std::string audioCleaner(const std::string &text);
 
     Speaker speaker;
+    Speaker phraseCallback;
     mutable std::mutex mtx;
     std::condition_variable ready;
     std::condition_variable idle;

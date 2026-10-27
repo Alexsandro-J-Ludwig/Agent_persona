@@ -91,6 +91,9 @@ void Chat::sendMessage(const std::string &prompt)
 
 void Chat::run()
 {
+    // ====== CHAT CONECTA A NOTIFICAÇÃO DE FALA À LEGENDA ======
+    orquestrador.setSpeechCallback([this](const std::string &phrase)
+                                 { terminal.showSpeechPhrase(phrase); });
     terminal.run([this](const std::string &prompt)
                  { sendMessage(prompt); });
 

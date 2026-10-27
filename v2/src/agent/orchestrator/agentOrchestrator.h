@@ -38,6 +38,8 @@ public:
         const std::string &prompt);
 
     void setAudioEnabled(bool enabled);
+    // ====== OBSERVADOR GENÉRICO DA FILA DE FALA ======
+    void setSpeechCallback(Speach::Speaker callback);
 };
 
 #endif

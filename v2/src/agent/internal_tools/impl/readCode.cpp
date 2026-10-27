@@ -35,8 +35,6 @@ ToolResult InternalTools::readCode(const std::string &arguments)
         if (!file.is_open())
             return {false, "", "Could not open file"};
 
-        std::ifstream file(filePath);
-
         std::string code;
         std::string line;
         int currentLine = 1;

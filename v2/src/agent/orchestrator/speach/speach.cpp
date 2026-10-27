@@ -102,6 +102,13 @@ std::string Speach::lastError() const
     return error;
 }
 
+// ====== NOTIFICAÇÃO SEM DEPENDÊNCIA DA INTERFACE ======
+void Speach::setPhraseCallback(Speaker callback)
+{
+    std::lock_guard lock(mtx);
+    phraseCallback = std::move(callback);
+}
+
 // ===================================================
 // Limpa as tags markdown do texto
 // ===================================================
@@ -162,6 +169,7 @@ void Speach::consume()
     while (true)
     {
         std::string phrase;
+        Speaker notify;
         {
             std::unique_lock lock(mtx);
             ready.wait(lock, [this]
@@ -174,6 +182,7 @@ void Speach::consume()
 
             phrases.pop_front();
             active = true;
+            notify = phraseCallback;
         }
 
         // A chamada demorada acontece fora do mutex e fora do streaming.
@@ -181,6 +190,9 @@ void Speach::consume()
         try
         {
             speaker(phrase);
+            // ====== NOTIFICA A FRASE APÓS O ENVIO AO TTS ======
+            if (notify)
+                notify(phrase);
         }
         catch (const std::exception &exception)
         {

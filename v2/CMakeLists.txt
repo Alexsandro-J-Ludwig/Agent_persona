@@ -164,6 +164,8 @@ target_include_directories(
 
         # Headers do MD4C
         ${md4c_SOURCE_DIR}/src
+
+        ${CMAKE_SOURCE_DIR}/src/agent/internal_tools
 )
 
 # ============================================================

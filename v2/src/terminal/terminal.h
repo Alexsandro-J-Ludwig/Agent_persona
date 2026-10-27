@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cstdint>
 #include <functional>
+#include <deque>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -43,6 +44,8 @@ public:
     // ---- Estado visível (status, áudio, "pensando") ----
     void setStatus(const std::string &status);
     void setAudioStatus(bool status);
+    // ====== LEGENDA POR FRASE ENVIADA AO REPRODUTOR ======
+    void showSpeechPhrase(const std::string &phrase);
     void startThinking();
     void setAwaitToken();
     double stopThinking();
@@ -56,6 +59,8 @@ private:
     ftxui::Component initDisplay();
     ftxui::Component displayInput(SubmitCallback onSubmit);
     ftxui::Component thinkingStatus();
+    // ====== PERSPECTIVA DE VOZ: CANVAS E LEGENDA ======
+    ftxui::Element voiceView();
 
     // ---- Tela ----
     ftxui::ScreenInteractive screen = ftxui::ScreenInteractive::Fullscreen();
@@ -72,6 +77,12 @@ private:
     std::atomic<int> spinnerFrame{0};
     std::chrono::steady_clock::time_point generationStart{};
     std::jthread timerThread;
+    // ====== ANIMAÇÃO VISUAL DO MODO DE VOZ ======
+    std::jthread voiceAnimation;
+    ftxui::Box voiceBox;
+    std::deque<std::string> speechCaptions;
+    std::string lastCaption;
+    std::chrono::steady_clock::time_point captionStart{};
 
 
     // ---- Estado só da UI ----

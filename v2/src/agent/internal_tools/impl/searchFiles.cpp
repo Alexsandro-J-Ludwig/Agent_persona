@@ -1,5 +1,28 @@
 #include "internalTools.h"
 
+namespace
+{
+    // Compara sem diferenciar maiúsculas e minúsculas (ASCII).
+    bool containsInsensitive(const std::wstring &text, const std::wstring &needle)
+    {
+        if (needle.empty())
+            return true;
+
+        auto lower = [](wchar_t c)
+        {
+            return (c >= L'A' && c <= L'Z') ? static_cast<wchar_t>(c + (L'a' - L'A')) : c;
+        };
+
+        auto it = std::search(
+            text.begin(), text.end(),
+            needle.begin(), needle.end(),
+            [&](wchar_t a, wchar_t b)
+            { return lower(a) == lower(b); });
+
+        return it != text.end();
+    }
+}
+
 ToolResult InternalTools::searchFiles(const std::string &arguments)
 {
     std::string term;
