@@ -251,88 +251,121 @@ void TerminalDisplay::showSpeechPhrase(const std::string &phrase)
     screen.PostEvent(Event::Custom);
 }
 
+ftxui::Element TerminalDisplay::historyView()
+{
+    ftxui::Elements history;
+
+    {
+        std::lock_guard<std::mutex> lock(chat_mutex);
+
+        for (const auto &entry : messages)
+        {
+            history.push_back(
+                ftxui::vbox({ftxui::text(entry.role) | ftxui::bold,
+                             ftxui::paragraph(entry.message)}));
+
+            history.push_back(ftxui::separator());
+        }
+    }
+
+    return ftxui::vbox(std::move(history)) | ftxui::vscroll_indicator | ftxui::frame | ftxui::border;
+}
+
 // ============================================================
 // CANVAS DE VOZ: CIRCUNFERÊNCIA RGB E LEGENDA DA RESPOSTA
 // ============================================================
 Element TerminalDisplay::voiceView()
 {
     const auto now = std::chrono::steady_clock::now();
-    const double time = std::chrono::duration<double>(
-                            std::chrono::steady_clock::now().time_since_epoch())
-                            .count();
+
+    const double time =
+        std::chrono::duration<double>(now.time_since_epoch()).count();
 
     const bool generating = isGenerating.load();
 
     bool speaking = false;
-    std::string caption;
+
     {
         std::lock_guard lock(chat_mutex);
-
-        // ====== AVANÇO ESTIMADO DA LEGENDA NA ORDEM DO TTS ======
-        while (!speechCaptions.empty())
-        {
-            const auto &phrase = speechCaptions.front();
-            const auto characters = std::count_if(phrase.begin(), phrase.end(),
-                                                  [](unsigned char c)
-                                                  { return (c & 0xC0) != 0x80; });
-
-            const auto duration = std::chrono::duration<double>(
-                std::max(0.8, static_cast<double>(characters) / 14.0));
-
-            lastCaption = phrase;
-
-            if (now - captionStart < duration)
-                break;
-
-            captionStart += std::chrono::duration_cast<std::chrono::steady_clock::duration>(duration);
-            speechCaptions.pop_front();
-        }
-
         speaking = !speechCaptions.empty();
-        caption = lastCaption;
     }
 
-    if (caption.empty())
-        caption = generating ? "Preparando a resposta..." : "Digite uma mensagem para conversar.";
+    // ====== GEOMETRIA DO ORBE ======
+    const int columns =
+        std::max(1, voiceBox.x_max - voiceBox.x_min + 1);
 
-    // ====== GEOMETRIA PARAMÉTRICA E DEFORMAÇÃO POR SENO E COSSENO ======
-    const int columns = std::max(1, voiceBox.x_max - voiceBox.x_min + 1);
-    const int rows = std::max(1, voiceBox.y_max - voiceBox.y_min + 1);
+    const int rows =
+        std::max(1, voiceBox.y_max - voiceBox.y_min + 1);
 
-    Canvas drawing(columns * 2, rows * 4);
+    Canvas drawing(columns * 16, rows * 64);
 
-    const double radius = std::max(0.5, std::min(columns * 0.78, rows * 1.45));
-    const double amplitude = speaking ? 0.11 : 0.018;
+    const double radius =
+        std::max(0.5, std::min(columns * 0.78, rows * 1.45));
 
+    const double amplitude = speaking ? 0.055 : 0.018;
+
+    // ====== ANIMAÇÃO ======
     for (int point = 0; point < 180; ++point)
     {
-        const double angle = point * 2.0 * std::numbers::pi / 180.0;
-        const double wave = 0.65 * std::sin(6.0 * angle + time * 3.5) +
-                            0.35 * std::cos(9.0 * angle - time * 2.4);
+        const double angle =
+            point * 2.0 * std::numbers::pi / 180.0;
+
+        const double wave =
+            0.65 * std::sin(4.0 * angle + time * 3.5) +
+            0.25 * std::cos(9.0 * angle - time * 2.4);
+
         const double r =
-            radius * (1.0 + amplitude * wave + 0.02 * std::sin(time * 1.6));
+            radius *
+            (1.0 + amplitude * wave +
+             0.012 * std::sin(time * 1.6));
 
-        const int x =
-            static_cast<int>(columns + r * std::cos(angle));
-        const int y =
-            static_cast<int>(rows * 2 + r * std::sin(angle));
+        const int x = static_cast<int>(
+            columns + r * std::cos(angle));
 
-        const int red = static_cast<int>(45 + 40 * std::sin(angle + time));
-        const int green = static_cast<int>(195 + 50 * std::sin(angle + time * 0.7));
-        const int blue = static_cast<int>(205 + 50 * std::cos(angle - time * 0.5));
+        const int y = static_cast<int>(
+            rows * 2 + r * std::sin(angle));
 
-        drawing.DrawPoint(x, y, true, Color::RGB(red, green, blue));
-        drawing.DrawPoint(x + 1, y, true, Color::RGB(red / 3, green / 3, blue / 3));
+        const int red = static_cast<int>(
+            45 + 40 * std::sin(angle + time));
+
+        const int green = static_cast<int>(
+            195 + 50 * std::sin(angle + time * 0.7));
+
+        const int blue = static_cast<int>(
+            205 + 50 * std::cos(angle - time * 0.5));
+
+        const int thickness = speaking ? 5 : 10;
+
+        for (int dx = 0; dx < thickness; ++dx)
+        {
+            const int shade = (dx == 0) ? 6 : 5;
+
+            drawing.DrawPoint(
+                x + dx,
+                y,
+                true,
+                Color::RGB(
+                    red / shade,
+                    green / shade,
+                    blue / shade));
+        }
     }
 
-    auto orb = canvas(std::move(drawing)) | flex | reflect(voiceBox);
-    auto subtitle = paragraph(caption) | color(Color::RGB(160, 220, 245)) |
-                    size(HEIGHT, LESS_THAN, 4) | yframe;
+    auto orb =
+        canvas(std::move(drawing)) | flex | reflect(voiceBox);
 
-    return vbox({orb, separator(),
-                 text(speaking ? "AGENTE DE VOZ · Fala estimada" : (generating ? "AGENTE DE VOZ · Preparando" : "AGENTE DE VOZ · Pronto")) |
-                     bold | color(Color::Cyan),
-                 subtitle}) |
+    auto status =
+        text(
+            speaking
+                ? "AGENTE DE VOZ · Falando"
+                : (generating
+                       ? "AGENTE DE VOZ · Preparando"
+                       : "AGENTE DE VOZ · Pronto")) |
+        bold | color(Color::Cyan);
+
+    return vbox({orb,
+                 separator(),
+                 status}) |
            flex;
 }
 
@@ -474,7 +507,17 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
     // Layout e eventos globais
     // --------------------------------------------------------
 
-    auto layout = Container::Vertical({chatScroll,
+    int voiceSplitSize = 105;
+
+    auto voiceRenderer = Renderer([this]
+                                  { return voiceView(); });
+
+    auto voiceLayout = ResizableSplitLeft(
+        chatScroll,
+        voiceRenderer,
+        &voiceSplitSize);
+
+    auto layout = Container::Vertical({voiceLayout,
                                        input});
 
     // Permite rolar mesmo quando o input está focado.
@@ -541,16 +584,22 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
 
     // ====== ALTERNÂNCIA ENTRE CONVERSA E PERSPECTIVA DE VOZ ======
     if (audioEnabled.load())
-    {
-        elements.push_back(voiceView());
-        if (showCommands)
-            elements.push_back(commandView());
-        elements.push_back(input->Render());
-        elements.push_back(ts->Render());
-        elements.push_back(statusBar->Render());
-        return vbox(std::move(elements)) | borderRounded |
-               color(Color::RGB(150, 210, 245)) | bgcolor(Color::Black);
-    }
+{
+    elements.push_back(voiceLayout->Render() | flex);
+
+    if (showCommands)
+        elements.push_back(commandView());
+
+    elements.push_back(input->Render());
+    elements.push_back(ts->Render());
+    elements.push_back(statusBar->Render());
+
+    return vbox(std::move(elements))
+         | flex
+         | borderRounded
+         | color(Color::RGB(150, 210, 245))
+         | bgcolor(Color::Black);
+}
 
     // Conversa ocupa o espaço disponível.
     elements.push_back(

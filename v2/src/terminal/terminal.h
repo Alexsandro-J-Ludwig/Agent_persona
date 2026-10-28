@@ -59,6 +59,7 @@ private:
     ftxui::Component initDisplay();
     ftxui::Component displayInput(SubmitCallback onSubmit);
     ftxui::Component thinkingStatus();
+    ftxui::Element historyView();
     // ====== PERSPECTIVA DE VOZ: CANVAS E LEGENDA ======
     ftxui::Element voiceView();
 
