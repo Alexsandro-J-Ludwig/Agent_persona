@@ -45,8 +45,9 @@ namespace platform
                 const std::string r = std::to_string(rate);
 #ifdef _WIN32
                 const fs::path ff = fs::absolute(fs::path("libs") / "ffplay" / "windows" / "ffplay.exe");
-                return quote(ff) + " -nodisp -loglevel error -fflags nobuffer -probesize 32 -autoexit"
-                                   "-f s16le -ar " +
+                return quote(ff) +
+                       " -nodisp -loglevel error -fflags nobuffer -probesize 32 -autoexit"
+                       " -f s16le -ar " +
                        r + " -ch_layout mono -i -";
 #else
                 return "aplay -q -r " + r + " -f S16_LE -c 1 -t raw -";

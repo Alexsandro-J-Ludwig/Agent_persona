@@ -36,8 +36,7 @@ std::string Orquestrador::run(
     bool thinking,
     bool audio,
     Ollama::StreamCallback onChunk,
-    ToolCallback onTool
-)
+    ToolCallback onTool)
 {
     const Model &model = getModel(role);
 
@@ -56,6 +55,13 @@ std::string Orquestrador::run(
     {
         const bool toolsAllowed =
             round < Config::Properties::max_rounds;
+
+        if (round == Config::Properties::max_rounds)
+        {
+            manager.addHistory(
+                "System",
+                "Limite de rounds atingido, você não poderá chamar novas ferramentas nessa requisção");
+        };
 
         manager.alterSystemHistory(role, thinking, toolsAllowed);
 

@@ -23,6 +23,26 @@ namespace
     }
 }
 
+namespace
+{
+    const std::set<std::string> IGNORED_DIRS = {
+        "build", "_deps", "CMakeFiles", ".git", ".vs", ".vscode",
+        "node_modules", "__pycache__", "out", ".cache"};
+}
+
+namespace
+{
+    constexpr std::size_t MAX_RESULTS = 30;
+    constexpr auto TIME_BUDGET = std::chrono::seconds(5);
+
+    bool validTerm(const std::string &t)
+    {
+        return t.size() >= 3 &&
+               t.find_first_not_of(
+                   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ._-áéíóúâêôãõçÁÉÍÓÚÂÊÔÃÕÇ") == std::string::npos;
+    }
+}
+
 ToolResult InternalTools::searchFiles(const std::string &arguments)
 {
     std::string term;
@@ -43,86 +63,99 @@ ToolResult InternalTools::searchFiles(const std::string &arguments)
     if (term.empty())
         return {false, "", "Termo de pesquisa vazio."};
 
+    if (!validTerm(term))
+        return {
+            false,
+            "",
+            "Não é um termo valido"};
+
 #ifdef _WIN32
-    const fs::path termPath = fs::u8path(term);
-    const std::wstring needle = termPath.wstring();
+    const std::wstring needle =
+        fs::path(std::u8string(reinterpret_cast<const char8_t *>(term.data()), term.size())).wstring();
 
     const DWORD drives = GetLogicalDrives();
-
     if (drives == 0)
         return {false, "", "Não foi possível enumerar os discos."};
 
-    std::string result;
-    std::size_t found = 0;
+    std::vector<std::string> hits;
+    bool truncated = false;
+    const auto deadline = std::chrono::steady_clock::now() + TIME_BUDGET;
 
-    constexpr std::size_t maxStoredResults = 100;
-
-    for (int i = 0; i < 26; ++i)
+    for (int i = 0; i < 26 && !truncated; ++i)
     {
         if (!(drives & (1UL << i)))
             continue;
 
-        const wchar_t letter = static_cast<wchar_t>(L'A' + i);
-        const std::wstring root =
-            std::wstring(1, letter) + L":\\";
-
+        const std::wstring root = std::wstring(1, static_cast<wchar_t>(L'A' + i)) + L":\\";
         const UINT driveType = GetDriveTypeW(root.c_str());
-
-        if (driveType == DRIVE_NO_ROOT_DIR ||
-            driveType == DRIVE_UNKNOWN ||
-            driveType == DRIVE_CDROM)
-        {
+        if (driveType == DRIVE_NO_ROOT_DIR || driveType == DRIVE_UNKNOWN || driveType == DRIVE_CDROM)
             continue;
-        }
 
-        std::vector<fs::path> pending{fs::path(root)};
-        while (!pending.empty())
+        std::vector<fs::path> pending{root};
+
+        while (!pending.empty() && !truncated)
         {
+            if (std::chrono::steady_clock::now() > deadline)
+            {
+                truncated = true;
+                break;
+            }
+
             fs::path directory = std::move(pending.back());
             pending.pop_back();
+
             std::error_code ec;
-            fs::directory_iterator it(
-                directory, fs::directory_options::skip_permission_denied, ec);
-            const fs::directory_iterator end;
+            fs::directory_iterator it(directory, fs::directory_options::skip_permission_denied, ec);
             if (ec)
                 continue;
 
-            while (it != end)
+            for (const fs::directory_iterator end; it != end; it.increment(ec))
             {
-                const fs::path path = it->path();
-                if (containsInsensitive(path.filename().wstring(), needle))
+                if (ec)
                 {
-                    const auto pathUtf8 = path.u8string();
-                    result.append(reinterpret_cast<const char *>(pathUtf8.data()),
-                                  pathUtf8.size());
-                    result += '\n';
-                    if (++found >= maxStoredResults)
-                    {
-                        result.pop_back();
-                        return {true, result, ""};
-                    }
+                    ec.clear();
+                    break;
                 }
 
-                const DWORD attributes = GetFileAttributesW(path.c_str());
-                if (attributes != INVALID_FILE_ATTRIBUTES &&
-                    (attributes & FILE_ATTRIBUTE_DIRECTORY) &&
-                    !(attributes & FILE_ATTRIBUTE_REPARSE_POINT))
-                    pending.push_back(path);
+                const fs::path path = it->path();
+                const std::string name = path.filename().string();
 
-                it.increment(ec);
-                if (ec)
-                    break;
+                if (containsInsensitive(path.filename().wstring(), needle))
+                {
+                    if (hits.size() == MAX_RESULTS)
+                    {
+                        truncated = true;
+                        break;
+                    }
+                    const auto utf8 = path.u8string();
+                    hits.emplace_back(reinterpret_cast<const char *>(utf8.data()), utf8.size());
+                }
+
+                const DWORD attr = GetFileAttributesW(path.c_str());
+                if (attr != INVALID_FILE_ATTRIBUTES &&
+                    (attr & FILE_ATTRIBUTE_DIRECTORY) &&
+                    !(attr & FILE_ATTRIBUTE_REPARSE_POINT) &&
+                    !IGNORED_DIRS.count(name))
+                {
+                    pending.push_back(path);
+                }
             }
         }
     }
 
-    if (found == 0)
+    if (hits.empty())
         return {false, "", "Nenhum arquivo encontrado nos diretórios acessíveis."};
 
-    if (!result.empty() && result.back() == '\n')
-        result.pop_back();
+    std::string out;
+    for (const auto &h : hits)
+        out += h + '\n';
 
-    return {true, result, ""};
+    if (truncated)
+        out += "... (busca interrompida pelo limite de resultados ou de tempo; refine o termo)";
+    else
+        out.pop_back();
+
+    return {true, out, ""};
 
 #else
     std::string termo_str;
@@ -140,9 +173,12 @@ ToolResult InternalTools::searchFiles(const std::string &arguments)
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ._-") != std::string::npos)
         return {false, "", "Termo inválido: use 3+ caracteres, só letras, números, espaço, '.', '-' ou '_'."};
 
-    std::string comando =
-        "find / \\( -path /proc -o -path /sys -o -path /dev -o -path /run \\) -prune -o -iname '*" + termo_str +
-        "*' -print 2>/dev/null | head -n 10";
+    const std::string comando =
+        "find / \\( -path /proc -o -path /sys -o -path /dev -o -path /run \\) -prune -o "
+        "\\( -type d \\( -name build -o -name _deps -o -name CMakeFiles -o -name .git "
+        "-o -name node_modules -o -name .vs \\) -prune \\) -o "
+        "-iname '*" +
+        term + "*' -print 2>/dev/null | head -n " + std::to_string(MAX_RESULTS + 1);
 
     std::array<char, 1128> buffer;
     std::string resultado;

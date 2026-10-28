@@ -98,20 +98,21 @@ bool TTSService::speak(const std::string &text)
     clean_text += '\n';
 
     const std::size_t written = std::fwrite(clean_text.data(), 1, clean_text.size(), piper_stream);
-    std::fflush(piper_stream);
+    // ====== CONFIRMA A ESCRITA E O FLUSH DO PIPE ======
+    const int flushResult = std::fflush(piper_stream);
 
     std::cerr << "[TTS DEBUG] Bytes enviados: "
               << written << "/" << clean_text.size() << '\n';
 
-    if (written != clean_text.size())
+    if (written != clean_text.size() || flushResult != 0 || std::ferror(piper_stream))
     {
         std::cerr << "[TTS AVISO] Pipe quebrou, tentando reconectar...\n";
         closeStream();
         if (openStream())
         {
-            std::fwrite(clean_text.data(), 1, clean_text.size(), piper_stream);
-            std::fflush(piper_stream);
-            return true;
+            const auto retried = std::fwrite(clean_text.data(), 1, clean_text.size(), piper_stream);
+            const int retryFlush = std::fflush(piper_stream);
+            return retried == clean_text.size() && retryFlush == 0 && !std::ferror(piper_stream);
         }
         return false;
     }

@@ -59,9 +59,14 @@ namespace ToolSchemas
     {
         return makeTool(
             "listDirectory",
-            "Lists the entries of a directory without descending into subfolders "
-            "(directories end with '/'). Args: path (string, optional, defaults to the current directory).",
-            json::object({{"path", prop("string", "Directory to list, relative to the current directory or absolute inside the workspace.")}}));
+            "Lists ONLY direct children of a directory, without recursion. Returns relative names; "
+            "directories end with '/'. Output is limited to 8 KiB and 40 entries by default. "
+            "When truncated=true, continue with the same path and next_offset as offset. "
+            "To inspect a subfolder, call again with that subfolder as path. "
+            "Args: path (optional, default '.'), offset (default 0), limit (1-100, default 40).",
+            json::object({{"path", prop("string", "Directory to list.")},
+                          {"offset", prop("integer", "Number of entries to skip; use next_offset to continue.")},
+                          {"limit", prop("integer", "Maximum entries per page, 1 to 100. Default 40.")}}));
     }
 
     inline json readCode()

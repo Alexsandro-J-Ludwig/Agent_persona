@@ -64,7 +64,14 @@ void Chat::sendMessage(const std::string &prompt)
             // tool: mostra e fecha a mensagem atual; a próxima rodada abre outra
             [&](const std::string &name, const ToolResult &r)
             {
-                terminal.addMessage("Tool", name + " → " + (r.success ? r.output : "erro: " + r.error));
+                std::string flat = r.output;
+                std::replace(flat.begin(), flat.end(), '\n', ' ');
+
+                const std::string shown = flat.size() > 100
+                    ? flat.substr(0, 100) + "..."
+                    : flat;
+
+                terminal.addMessage("Tool", name + " → " + (r.success ? shown : "erro: " + r.error));
                 current.reset();
             });
 
@@ -93,7 +100,7 @@ void Chat::run()
 {
     // ====== CHAT CONECTA A NOTIFICAÇÃO DE FALA À LEGENDA ======
     orquestrador.setSpeechCallback([this](const std::string &phrase)
-                                 { terminal.showSpeechPhrase(phrase); });
+                                   { terminal.showSpeechPhrase(phrase); });
     terminal.run([this](const std::string &prompt)
                  { sendMessage(prompt); });
 

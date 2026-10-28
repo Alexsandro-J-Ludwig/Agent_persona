@@ -25,7 +25,8 @@ Speach::~Speach()
 
 void Speach::feed(const std::string &token)
 {
-    pendingSpeech += token;
+    // ====== LIMPA O MARKDOWN ANTES DE TESTAR E ENFILEIRAR A FRASE ======
+    pendingSpeech += audioCleaner(token);
 
     bool hasEndPunct = (pendingSpeech.find('.') != std::string::npos ||
                         pendingSpeech.find('!') != std::string::npos ||
@@ -39,21 +40,27 @@ void Speach::feed(const std::string &token)
                            pendingSpeech.find(':') != std::string::npos ||
                            pendingSpeech.find(';') != std::string::npos));
 
-    if(hasEndPunct || hasLongClause)
+    if (hasEndPunct || hasLongClause)
     {
         if (pendingSpeech.find_first_not_of(" \t\r\n") != std::string::npos)
+        {
             enqueue(pendingSpeech);
-        pendingSpeech.clear();
+            pendingSpeech.clear();
+        }
     }
-
-    if (hasEndPunct || hasLongClause)
-        flush();
 }
 
 void Speach::flush()
 {
-    std::string text = audioCleaner(pendingSpeech);
+    // ====== FINALIZA A RESPOSTA SEM VAZAR ESTADO PARA A PRÓXIMA ======
+    pendingSpeech += audioCleaner("", true);
+    std::string text = std::move(pendingSpeech);
     pendingSpeech.clear();
+    markdownBuffer.clear();
+    insideCodeBlock = false;
+    atLineStart = true;
+    fenceLength = 3;
+    fenceMarker = '`';
     if (text.find_first_not_of(" \t\r\n") != std::string::npos)
         enqueue(std::move(text));
 }
@@ -112,52 +119,130 @@ void Speach::setPhraseCallback(Speaker callback)
 // ===================================================
 // Limpa as tags markdown do texto
 // ===================================================
-std::string Speach::audioCleaner(const std::string &text)
+std::string Speach::audioCleaner(const std::string &text, bool final)
 {
+    markdownBuffer += text;
     std::string result;
-    result.reserve(text.size());
+    std::size_t i = 0;
 
-    size_t i = 0;
-
-    while (i < text.size())
+    // ====== PREFIXOS DE LINHA E CERCAS PODEM CHEGAR EM CHUNKS DIFERENTES ======
+    while (i < markdownBuffer.size())
     {
-        // Detecta início/fim de bloco Markdown
-        if (text.compare(i, 3, "```") == 0)
+        if (atLineStart || insideCodeBlock)
         {
-            insideCodeBlock = !insideCodeBlock;
-            i += 3;
+            const auto newline = markdownBuffer.find('\n', i);
+            const auto end = newline == std::string::npos ? markdownBuffer.size() : newline;
+            std::size_t first = i;
+            while (first < end && (markdownBuffer[first] == ' ' || markdownBuffer[first] == '\t'))
+                ++first;
+
+            if (insideCodeBlock)
+            {
+                if (newline == std::string::npos && !final)
+                    break;
+
+                std::size_t fenceEnd = first;
+                while (fenceEnd < end && markdownBuffer[fenceEnd] == fenceMarker)
+                    ++fenceEnd;
+
+                if (first - i <= 3 && fenceEnd - first >= fenceLength &&
+                    markdownBuffer.find_first_not_of(" \t\r", fenceEnd) >= end)
+                    insideCodeBlock = false;
+
+                i = end + (newline != std::string::npos ? 1 : 0);
+                continue;
+            }
+
+            if (first == end)
+            {
+                if (newline == std::string::npos && !final)
+                    break;
+                result += '\n';
+                i = end + (newline != std::string::npos ? 1 : 0);
+                continue;
+            }
+
+            const char marker = markdownBuffer[first];
+            std::size_t after = first;
+            while (after < end && markdownBuffer[after] == marker)
+                ++after;
+
+            if ((marker == '`' || marker == '~') && first - i <= 3)
+            {
+                if (after == end && newline == std::string::npos && !final)
+                    break;
+
+                if (after - first >= 3)
+                {
+                    if (newline == std::string::npos && !final)
+                        break;
+                    insideCodeBlock = true;
+                    fenceMarker = marker;
+                    fenceLength = after - first;
+                    i = end + (newline != std::string::npos ? 1 : 0);
+                    continue;
+                }
+            }
+
+            // ====== TÍTULOS E LISTAS SOMENTE NO INÍCIO DA LINHA ======
+            std::size_t prefixEnd = first;
+            if (marker == '#')
+            {
+                if (after == end && newline == std::string::npos && !final)
+                    break;
+                if (after - first <= 6 && after < end &&
+                    (markdownBuffer[after] == ' ' || markdownBuffer[after] == '\t'))
+                    prefixEnd = after + 1;
+            }
+            else if (marker == '*' || marker == '-' || marker == '+')
+            {
+                if (first + 1 == end && newline == std::string::npos && !final)
+                    break;
+                if (first + 1 < end &&
+                    (markdownBuffer[first + 1] == ' ' || markdownBuffer[first + 1] == '\t'))
+                    prefixEnd = first + 2;
+            }
+            else if (marker >= '0' && marker <= '9')
+            {
+                std::size_t numberEnd = first;
+                while (numberEnd < end && markdownBuffer[numberEnd] >= '0' && markdownBuffer[numberEnd] <= '9')
+                    ++numberEnd;
+                if (newline == std::string::npos && !final &&
+                    (numberEnd == end ||
+                     (numberEnd + 1 == end && (markdownBuffer[numberEnd] == '.' || markdownBuffer[numberEnd] == ')'))))
+                    break;
+                if (numberEnd + 1 < end &&
+                    (markdownBuffer[numberEnd] == '.' || markdownBuffer[numberEnd] == ')') &&
+                    (markdownBuffer[numberEnd + 1] == ' ' || markdownBuffer[numberEnd + 1] == '\t'))
+                    prefixEnd = numberEnd + 2;
+            }
+
+            i = prefixEnd;
+            atLineStart = false;
             continue;
         }
 
-        // Ignora tudo dentro do bloco
-        if (insideCodeBlock)
+        // ====== MARCADORES INLINE: GUARDA O ÚLTIMO CARACTERE AMBÍGUO ======
+        const char c = markdownBuffer[i];
+        if (c == '*' || c == '_' || c == '~')
         {
-            ++i;
-            continue;
+            if (i + 1 == markdownBuffer.size() && !final)
+                break;
+            if (i + 1 < markdownBuffer.size() && markdownBuffer[i + 1] == c)
+            {
+                i += 2;
+                continue;
+            }
         }
 
-        // Remove marcadores de formatação
-        if (text.compare(i, 2, "**") == 0 ||
-            text.compare(i, 2, "__") == 0 ||
-            text.compare(i, 2, "~~") == 0)
-        {
-            i += 2;
-            continue;
-        }
-
-        // Remove marcadores simples
-        if (text[i] == '*' ||
-            text[i] == '`' ||
-            text[i] == '#')
-        {
-            ++i;
-            continue;
-        }
-
-        result += text[i];
+        if (c != '`')
+            result += c;
+        if (c == '\n')
+            atLineStart = true;
         ++i;
     }
 
+    markdownBuffer.erase(0, i);
     return result;
 }
 

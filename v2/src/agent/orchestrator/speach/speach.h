@@ -32,9 +32,14 @@ public:
 private:
     void consume();
     bool insideCodeBlock = false;
+    // ====== ESTADO DO MARKDOWN ENTRE CHUNKS ======
+    bool atLineStart = true;
+    char fenceMarker = '`';
+    std::size_t fenceLength = 3;
+    std::string markdownBuffer;
     std::string pendingSpeech;
 
-    std::string audioCleaner(const std::string &text);
+    std::string audioCleaner(const std::string &text, bool final = false);
 
     Speaker speaker;
     Speaker phraseCallback;
