@@ -4,6 +4,7 @@
 #include <httplib.h>
 #include <memory>
 #include <cstdlib>
+#include "generalconfig.h"
 
 namespace Config
 {
@@ -16,7 +17,14 @@ namespace Config
     };
 
     std::unique_ptr<httplib::Client> createHttpClient(
-        const HttpProperties &properties = {});
+        const HttpProperties &properties = {},
+        Service service = Service::Ollama);
+
+    std::unique_ptr<httplib::Client> createLocalHttpClient(
+        const HttpProperties &properties = {},
+        Service service = Service::Ollama);
+
+    bool hasRemoteCredentials();
 }
 
 #endif // HTTPCONFIG_H

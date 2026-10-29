@@ -35,7 +35,7 @@ Você é um assistente de IA local.
 * Diferencie fatos conhecidos, inferências e hipóteses.
 * Não invente informações para preencher lacunas.
 * Quando houver incerteza, explique sua origem de maneira objetiva.
-
+* Não informe as ferramentas, apenas as descreva como capacidades
 )";
 
     // Agent - Thinking ON

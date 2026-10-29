@@ -21,6 +21,7 @@
 #include "src/configs/agentconfig.h"
 #include "src/ollama/ollama.h"
 #include "src/agent/internal_tools/audio/ttsService.h"
+#include "src/configs/searxng.h"
 
 namespace fs = std::filesystem;
 
@@ -61,6 +62,7 @@ public:
 private:
     Ollama ollama;
     TTSService tts;
+    Searxng searx_;
 
     std::string parametersOf(const std::string &toolName) const;
 
@@ -73,7 +75,8 @@ private:
     ToolResult searchFiles(const std::string &arguments);
     ToolResult listDirectory(const std::string &arguments);
     ToolResult readCode(const std::string &arguments);
-    ToolResult searchWeb(const std::string &arguments);
+    ToolResult getUrls(const std::string &arguments);
+    ToolResult getHTML(const std::string &arguments);
 
     inline static const std::array<ToolInfo, 9> TOOLS =
         {{{"decide_think", ToolCaller::System, &InternalTools::decideThink},
@@ -82,7 +85,9 @@ private:
           {"calculator", ToolCaller::Model, &InternalTools::calculator},
           {"searchFiles", ToolCaller::Model, &InternalTools::searchFiles},
           {"listDirectory", ToolCaller::Model, &InternalTools::listDirectory},
-          {"readCode", ToolCaller::Model, &InternalTools::readCode}}};
+          {"readCode", ToolCaller::Model, &InternalTools::readCode},
+          {"getUrls", ToolCaller::Model, &InternalTools::getUrls},
+          {"getHTML", ToolCaller::Model, &InternalTools::getHTML}}};
 };
 
 #endif

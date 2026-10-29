@@ -113,6 +113,7 @@ add_executable(agent
     src/configs/models.cpp
     src/configs/dotenv.cpp
     src/configs/httplibconfig.cpp
+    src/configs/searxng.cpp
 
     # Ollama
     src/ollama/ollama.cpp
@@ -144,6 +145,8 @@ add_executable(agent
     src/agent/internal_tools/impl/listDirectory.cpp
     src/agent/internal_tools/impl/readCode.cpp
     src/agent/internal_tools/impl/searchFiles.cpp
+    src/agent/internal_tools/impl/getURL.cpp
+    src/agent/internal_tools/impl/getHTML.cpp
 
     # Internal Tools audio
     src/agent/internal_tools/audio/ttsService.cpp
