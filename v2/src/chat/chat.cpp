@@ -1,6 +1,10 @@
 #include "chat.h"
 
+#include <atomic>
+#include <exception>
+#include <optional>
 #include <string>
+#include <thread>
 
 void Chat::sendMessage(const std::string &prompt)
 {
@@ -10,99 +14,242 @@ void Chat::sendMessage(const std::string &prompt)
     if (ai_thread.joinable())
         ai_thread.join();
 
-    // Guarda a mensagem do usuário no historico de conversa
+    // Mensagem do usuário.
     terminal.addMessage("User", prompt);
 
-    // Cria uma thread para não travar o sistema e permitir que seja iniciado um processo de contagem de
-    // de tempo para debbug
     ai_thread = std::thread([this, prompt]()
                             {
-    bool timerStarted = false;
-    std::optional<MessageId> current; 
-
-    try
-    {
-        auto [role, thinking, audio, texto] =
-            orquestrador.selectModel(prompt);
-
-        terminal.setAudioStatus(audio);
-
-        if (texto.find_first_not_of(" \t\n\r") == std::string::npos)
+        struct ProcessingGuard
         {
-            terminal.setStatus("");
-            processing = false;
-            return;
-        }
+            std::atomic_bool& flag;
 
-        // Feedback visual para o usuario identificar o que o modelo está fazendo <- MERECE REVISÃO
-        // Se o modelo esta pensando ou nao
-        terminal.setStatus(
-            std::string(
-                role == ModelRole::Think ? "Think" : "Agent"
-            ) +
-            (thinking ? " | Thinking ON" : " | Thinking OFF")
-        );
-
-        // Inicia o cronometro de contagem de tempo de resposta do agente
-        terminal.startThinking();
-        timerStarted = true;
-
-        // Realiza o chamado principal do orquestrador
-        orquestrador.run(texto, role, thinking, audio,
-            // texto do modelo: vai para a mensagem atual
-            [&](const std::string &chunk)
+            ~ProcessingGuard()
             {
-                if (!current)
-                {
-                    if (chunk.find_first_not_of(" \t\r\n") == std::string::npos)
-                        return;                               
-                    current = terminal.addMessage("IA", "");
-                }
-                terminal.appendChunk(*current, chunk);
-            },
+                flag.store(false);
+            }
+        } guard{processing};
 
-            // tool: mostra e fecha a mensagem atual; a próxima rodada abre outra
-            [&](const std::string &name, const ToolResult &r)
+        bool timerStarted = false;
+
+        std::optional<MessageId> current;
+        std::optional<MessageId> thinkCurrent;
+
+        // Finaliza as mensagens de resposta e pensamento abertas,
+        // além do agrupador de ferramentas, caso exista.
+        auto finishOpenMessages = [&]()
+        {
+            if (current)
             {
-                std::string flat = r.output;
-                std::replace(flat.begin(), flat.end(), '\n', ' ');
-
-                const std::string shown = flat.size() > 100
-                    ? flat.substr(0, 100) + "..."
-                    : flat;
-
-                terminal.addMessage("Tool", name + " → " + (r.success ? shown : "erro: " + r.error));
+                terminal.finishMessage(*current);
                 current.reset();
-            });
+            }
 
-        terminal.stopThinking();
-        timerStarted = false;
+            if (thinkCurrent)
+            {
+                terminal.finishMessage(*thinkCurrent);
+                thinkCurrent.reset();
+            }
 
-        terminal.setStatus("");
-    }
-    catch (const std::exception &e)
-    {
-        if (timerStarted)
+            terminal.finishToolGroup();
+        };
+
+        try
+        {
+            auto [role, thinking, audio, texto] =
+                orquestrador.selectModel(prompt);
+
+            terminal.setAudioStatus(audio);
+
+            if (texto.find_first_not_of(" \t\n\r") == std::string::npos)
+            {
+                terminal.setStatus("");
+                return;
+            }
+
+            terminal.setStatus(
+                std::string(
+                    role == ModelRole::Think ? "Think" : "Agent"
+                ) +
+                (thinking ? " | Thinking ON" : " | Thinking OFF")
+            );
+
+            terminal.startThinking();
+            timerStarted = true;
+
+            orquestrador.run(
+                texto,
+                role,
+                thinking,
+                audio,
+
+                // =========================================
+                // RESPOSTA DO MODELO
+                // =========================================
+                [&](const std::string& chunk)
+                {
+                    if (!current)
+                    {
+                        if (chunk.find_first_not_of(" \t\r\n") ==
+                            std::string::npos)
+                        {
+                            return;
+                        }
+
+                        // Finaliza o pensamento anterior.
+                        if (thinkCurrent)
+                        {
+                            terminal.finishMessage(*thinkCurrent);
+                            thinkCurrent.reset();
+                        }
+
+                        current = terminal.addMessage(
+                            "IA",
+                            "",
+                            true
+                        );
+                    }
+
+                    terminal.appendChunk(*current, chunk);
+                },
+
+                // =========================================
+                // PENSAMENTO DO MODELO
+                // =========================================
+                [&](const std::string& chunk)
+                {
+                    if (!thinkCurrent)
+                    {
+                        if (chunk.find_first_not_of(" \t\r\n") ==
+                            std::string::npos)
+                        {
+                            return;
+                        }
+
+                        // Finaliza uma resposta anterior, se existir.
+                        if (current)
+                        {
+                            terminal.finishMessage(*current);
+                            current.reset();
+                        }
+
+                        thinkCurrent = terminal.addMessage(
+                            "Thinking",
+                            "",
+                            true
+                        );
+                    }
+
+                    terminal.appendChunk(*thinkCurrent, chunk);
+                },
+
+                // =========================================
+                // RESULTADO DE UMA FERRAMENTA
+                // =========================================
+                [&](const std::string& name, const ToolResult& result)
+                {
+                    // A chamada de ferramenta encerra os canais
+                    // de resposta/pensamento do round anterior.
+                    if (current)
+                    {
+                        terminal.finishMessage(*current);
+                        current.reset();
+                    }
+
+                    if (thinkCurrent)
+                    {
+                        terminal.finishMessage(*thinkCurrent);
+                        thinkCurrent.reset();
+                    }
+
+                    // O TerminalDisplay cuida de todo o agrupamento.
+                    terminal.appendToolResult(
+                        name,
+                        result.success,
+                        result.output,
+                        result.error
+                    );
+                }
+            );
+
+            // Finaliza os componentes da execução.
+            finishOpenMessages();
+
             terminal.stopThinking();
+            timerStarted = false;
 
-        if (current)
-            terminal.appendChunk(*current, "\n\n[Erro: " + std::string(e.what()) + "]");
-        else
-            terminal.addMessage("Erro", e.what());
+            terminal.setStatus("");
+        }
+        catch (const std::exception& e)
+        {
+            if (timerStarted)
+            {
+                terminal.stopThinking();
+                timerStarted = false;
+            }
 
-        terminal.setStatus("Erro na geração");
-    }
+            const bool hasResponse = current.has_value();
 
-    processing = false; });
+            if (hasResponse)
+            {
+                terminal.appendChunk(
+                    *current,
+                    "\n\n**Erro na geração:** " + std::string(e.what())
+                );
+            }
+
+            finishOpenMessages();
+
+            if (!hasResponse)
+                terminal.addMessage("Erro", e.what());
+
+            terminal.setStatus("Erro na geração");
+        }
+        catch (...)
+        {
+            if (timerStarted)
+            {
+                terminal.stopThinking();
+                timerStarted = false;
+            }
+
+            const bool hasResponse = current.has_value();
+
+            if (hasResponse)
+            {
+                terminal.appendChunk(
+                    *current,
+                    "\n\n**Erro desconhecido na geração.**"
+                );
+            }
+
+            finishOpenMessages();
+
+            if (!hasResponse)
+            {
+                terminal.addMessage(
+                    "Erro",
+                    "Ocorreu um erro desconhecido."
+                );
+            }
+
+            terminal.setStatus("Erro na geração");
+        } });
 }
 
 void Chat::run()
 {
-    // ====== CHAT CONECTA A NOTIFICAÇÃO DE FALA À LEGENDA ======
-    orquestrador.setSpeechCallback([this](const std::string &phrase)
-                                   { terminal.showSpeechPhrase(phrase); });
-    terminal.run([this](const std::string &prompt)
-                 { sendMessage(prompt); });
+    // Conecta a notificação de fala à legenda.
+    orquestrador.setSpeechCallback(
+        [this](const std::string &phrase)
+        {
+            terminal.showSpeechPhrase(phrase);
+        });
+
+    terminal.run(
+        [this](const std::string &prompt)
+        {
+            sendMessage(prompt);
+        });
 
     if (ai_thread.joinable())
         ai_thread.join();

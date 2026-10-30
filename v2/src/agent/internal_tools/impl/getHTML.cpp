@@ -1,44 +1,6 @@
 #include "internalTools.h"
 #include "http.h"
 
-ToolResult InternalTools::getHTML(const std::string &arguments)
-{
-    try
-    {
-        const auto args = json::parse(arguments);
-        std::string url =
-            args.at("url").get<std::string>();
-
-        httplib::Client cli(url);
-
-        cli.set_connection_timeout(5);
-
-        std::string html;
-
-        if (auto res = cli.get("/"))
-        {
-            if (res->status == 200)
-            {
-                html = res->body;
-            }
-        }
-
-        html = cleanHTML(html);
-
-        return {
-            true,
-            url + ":" + html,
-            ""}
-    }
-    catch (const std::exception &e)
-    {
-        return {
-            false,
-            "",
-            e.what()};
-    }
-}
-
 inline std::string cleanHTML(std::string html)
 {
     // 1. Remover comentários HTML
@@ -90,4 +52,42 @@ inline std::string cleanHTML(std::string html)
         html, std::regex(R"(\s+)"), " ");
 
     return html;
+}
+
+ToolResult InternalTools::getHTML(const std::string &arguments)
+{
+    try
+    {
+        const auto args = json::parse(arguments);
+        std::string url =
+            args.at("url").get<std::string>();
+
+        httplib::Client cli(url);
+
+        cli.set_connection_timeout(5);
+
+        std::string html;
+
+        if (auto res = cli.Get("/"))
+        {
+            if (res->status == 200)
+            {
+                html = res->body;
+            }
+        }
+
+        html = cleanHTML(html);
+
+        return {
+            true,
+            url + ":" + html,
+            ""};
+    }
+    catch (const std::exception &e)
+    {
+        return {
+            false,
+            "",
+            e.what()};
+    }
 }

@@ -16,6 +16,7 @@ struct ChatResult
 {
     std::string response;
     nlohmann::json toolCalls = nlohmann::json::array();
+    std::string think;
 };
 
 class Ollama
@@ -24,6 +25,9 @@ public:
     Ollama();
     using json = nlohmann::json;
     using StreamCallback =
+        std::function<void(const std::string &)>;
+
+    using ThinkCallback =
         std::function<void(const std::string &)>;
 
     json generate(
@@ -41,9 +45,9 @@ public:
         const Model &model,
         const std::vector<json> &history,
         StreamCallback callback,
+        ThinkCallback thinkCallback,
         bool thinking = false,
-        const json &tools = json::array()
-    );
+        const json &tools = json::array());
 
 private:
     std::unique_ptr<httplib::Client> client;

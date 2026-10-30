@@ -48,6 +48,18 @@ Verifique cálculos e conclusões.
 Responda com clareza e objetividade.
 Evite explicações excessivamente longas.
 Reconheça quando não possuir informações suficientes.
+
+IDIOMA DO RACIOCÍNIO:
+
+Você deve realizar todo o seu processo de raciocínio
+em português brasileiro.
+
+Utilize português natural, claro e tecnicamente preciso.
+Termos técnicos, nomes de bibliotecas, funções e conceitos
+podem permanecer em inglês quando apropriado.
+
+Mantenha o mesmo idioma na resposta final, salvo quando
+o usuário solicitar explicitamente outro idioma.
 )";
 
     // Think - Thinking OFF
@@ -91,6 +103,18 @@ especializado na resolução de problemas complexos.
 - Evite introduções longas e repetições.
 - Não omita informações essenciais apenas para reduzir o tamanho.
 - Reconheça incertezas e limitações.
+
+IDIOMA DO RACIOCÍNIO:
+
+Você deve realizar todo o seu processo de raciocínio
+em português brasileiro.
+
+Utilize português natural, claro e tecnicamente preciso.
+Termos técnicos, nomes de bibliotecas, funções e conceitos
+podem permanecer em inglês quando apropriado.
+
+Mantenha o mesmo idioma na resposta final, salvo quando
+o usuário solicitar explicitamente outro idioma.
 )";
 
     std::string tool_instructions = R"(

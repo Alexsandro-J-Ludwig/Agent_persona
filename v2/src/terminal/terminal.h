@@ -15,6 +15,8 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <optional>
+#include <cstddef>
 
 #include "src/markdown/markdownRenderer.h"
 #include "src/markdown/markdownFtxui.h"
@@ -26,7 +28,10 @@ struct ChatMessage
     MessageId id;
     std::string role;
     std::string message;
+    std::string label;
+
     MarkdownRenderer markdown;
+    bool finished = false;
 };
 
 class TerminalDisplay
@@ -38,12 +43,26 @@ public:
     void run(SubmitCallback onSubmit);
 
     // ---- Mensagens ----
-    MessageId addMessage(const std::string &role, const std::string &message);
+    MessageId addMessage(
+        const std::string &role,
+        const std::string &message,
+        bool streaming = false,
+        std::string label = {});
     void appendChunk(MessageId id, const std::string &chunk);
+    void finishMessage(MessageId id);
+
+    void appendToolResult(
+        const std::string &name,
+        bool success,
+        const std::string &output,
+        const std::string &error);
+
+    void finishToolGroup();
 
     // ---- Estado visível (status, áudio, "pensando") ----
     void setStatus(const std::string &status);
     void setAudioStatus(bool status);
+
     // ====== LEGENDA POR FRASE ENVIADA AO REPRODUTOR ======
     void showSpeechPhrase(const std::string &phrase);
     void startThinking();
@@ -59,7 +78,6 @@ private:
     ftxui::Component initDisplay();
     ftxui::Component displayInput(SubmitCallback onSubmit);
     ftxui::Component thinkingStatus();
-    ftxui::Element historyView();
     // ====== PERSPECTIVA DE VOZ: CANVAS E LEGENDA ======
     ftxui::Element voiceView();
 
@@ -69,26 +87,33 @@ private:
     // ---- Estado compartilhado entre threads (protegido por chat_mutex) ----
     std::mutex chat_mutex;
     std::vector<ChatMessage> messages;
+    std::vector<MessageId> pendingUiMessages;
     std::string statusMessage;
     MessageId nextId = 0;
+    std::optional<MessageId> toolGroupMessage;
+    std::size_t toolCount = 0;
 
     // ---- Estado atômico (lido pela UI, escrito por outras threads) ----
     std::atomic<bool> isGenerating{false};
     std::atomic<bool> audioEnabled{false};
     std::atomic<int> spinnerFrame{0};
+
     std::chrono::steady_clock::time_point generationStart{};
     std::jthread timerThread;
+
     // ====== ANIMAÇÃO VISUAL DO MODO DE VOZ ======
     std::jthread voiceAnimation;
+
     ftxui::Box voiceBox;
+
     std::deque<std::string> speechCaptions;
     std::string lastCaption;
     std::chrono::steady_clock::time_point captionStart{};
 
-
     // ---- Estado só da UI ----
     std::string prompt;
     float scrollPosition = 1.0f;
+
     bool showCommands = false;
     bool awaitToken = false;
 

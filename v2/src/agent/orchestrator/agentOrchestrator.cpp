@@ -36,15 +36,15 @@ std::string Orquestrador::run(
     bool thinking,
     bool audio,
     Ollama::StreamCallback onChunk,
+    Ollama::ThinkCallback thinkChunk,
     ToolCallback onTool)
 {
     const Model &model = getModel(role);
 
-    // Altera o system prompt com base no modelo selecionado em router
+    // Cria o histórico conforme o modelo selecionado.
     if (manager.getHistory().empty())
         manager.createHistory(role, thinking);
 
-    // Adiciona o prompt do usuario no historico
     manager.compressIfNeeded(role);
     manager.addHistory("user", prompt);
 
@@ -60,45 +60,59 @@ std::string Orquestrador::run(
         {
             manager.addHistory(
                 "System",
-                "Limite de rounds atingido, você não poderá chamar novas ferramentas nessa requisção");
-        };
+                "Limite de rounds atingido. Você não poderá chamar "
+                "novas ferramentas nesta requisição.");
+        }
 
         manager.alterSystemHistory(role, thinking, toolsAllowed);
 
         response = ollama.chatStream(
             model,
             manager.getHistory(),
+
+            // Resposta do modelo.
             [&](const std::string &chunk)
             {
-                onChunk(chunk); // Atualiza o terminal.
+                if (onChunk)
+                    onChunk(chunk);
 
                 if (audio)
-                {
                     speech.feed(chunk);
-                }
             },
+
+            // Pensamento do modelo.
+            [&](const std::string &chunk)
+            {
+                if (thinkChunk)
+                    thinkChunk(chunk);
+            },
+
             thinking,
-            toolsAllowed ? toolSchemas : nlohmann::json::array());
+            toolsAllowed
+                ? toolSchemas
+                : nlohmann::json::array());
 
         if (audio)
             speech.flush();
 
-        manager.addHistory("assistant", response.response, response.toolCalls);
+        manager.addHistory(
+            "assistant",
+            response.response,
+            response.toolCalls);
 
+        // Não existem mais ferramentas para executar.
         if (response.toolCalls.empty() || !toolsAllowed)
             break;
 
-        taskManager.toolCalling(response.toolCalls,
-                                [&](const std::string &name, const ToolResult &r)
-                                {
-                                    manager.addHistory(
-                                        "tool",
-                                        r.success ? r.output : r.error,
-                                        Ollama::json::array(),
-                                        name);
-                                    if (onTool)
-                                        onTool(name, r);
-                                });
+        // Executa as ferramentas e apenas notifica o observador.
+        taskManager.toolCalling(
+            response.toolCalls,
+
+            [onTool](const std::string &name, const ToolResult &result)
+            {
+                if (onTool)
+                    onTool(name, result);
+            });
     }
 
     return response.response;
