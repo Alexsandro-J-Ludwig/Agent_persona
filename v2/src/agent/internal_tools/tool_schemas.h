@@ -116,6 +116,20 @@ namespace ToolSchemas
             json::array({"url"}));
     }
 
+    inline json plan()
+    {
+        return makeTool(
+            "plan",
+            "Creates a structured step-by-step plan for complex or long-running tasks "
+            "that need orchestration. Returns Task, Description, Steps and Maximum attempts. "
+            "Returns a message saying no planning is needed when the request is simple. "
+            "Args: msg (string, what the agent needs to plan), "
+            "userPrompt (string, the original user request).",
+            json::object({{"msg", prop("string", "What the agent needs planned.")},
+                          {"userPrompt", prop("string", "Original user request, unchanged.")}}),
+            json::array({"msg", "userPrompt"}));
+    }
+
     inline const json &all()
     {
         static const json schemas = json::array({calculator(),
@@ -123,7 +137,8 @@ namespace ToolSchemas
                                                  listDirectory(),
                                                  readCode(),
                                                  getUrls(),
-                                                 getHTML()});
+                                                 getHTML(),
+                                                 plan()});
         return schemas;
     }
 }

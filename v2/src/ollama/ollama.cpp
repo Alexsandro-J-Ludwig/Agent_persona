@@ -146,7 +146,7 @@ ChatResult Ollama::chatStream(
                 callback(content);
         }
 
-        const std::string think = message.value("think", "");
+        const std::string think = message.value("thinking", "");
         if (!think.empty())
         {
             responseThink += think;

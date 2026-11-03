@@ -1,8 +1,13 @@
 #include "internalTools.h"
 #include "http.h"
+#include <regex>
+#include <format>
+#include <tuple>
 
-inline std::string cleanHTML(std::string html)
+inline std::tuple<std::string, std::string> cleanHTML(std::string html)
 {
+    std::string links = "";
+
     // 1. Remover comentários HTML
     html = std::regex_replace(
         html, std::regex(R"(<!--[\s\S]*?-->)"), " ");
@@ -26,8 +31,6 @@ inline std::string cleanHTML(std::string html)
     // 6. Remover formulários, campos e controles
     html = std::regex_replace(
         html, std::regex(R"(<(form|select|option|textarea|button|label|input)\b[^>]*>[\s\S]*?</\1\s*>)", std::regex::icase), " ");
-
-    // Remover campos e controles autocontidos
     html = std::regex_replace(
         html, std::regex(R"(<(input|img|source|track|area|base|link|meta|param|wbr)\b[^>]*\/?>)", std::regex::icase), " ");
 
@@ -37,7 +40,23 @@ inline std::string cleanHTML(std::string html)
 
     // 8. Remover cabeçalho e rodapé global da página
     html = std::regex_replace(
-        html, std::regex(R"(<(head|nav|footer)\b[^>]*>[\s\S]*?</\1\s*>)", std::regex::icase), " ");
+        html, std::regex(R"(<(head|nav|footer|aside)\b[^>]*>[\s\S]*?</\1\s*>)", std::regex::icase), " ");
+
+    // --- CAPTURA DOS LINKS DO CORPO (Sintaxe de raw string corrigida e sem redeclaração) ---
+    std::regex linkRegex("<a\\s+[^>]*href=\"([^\"]*)\"[^>]*>(.*?)</a>", std::regex::icase);
+    auto linksBegin = std::sregex_iterator(html.begin(), html.end(), linkRegex);
+    auto linksEnd = std::sregex_iterator();
+
+    for (std::sregex_iterator i = linksBegin; i != linksEnd; ++i)
+    {
+        std::smatch match = *i;
+        std::string href = match[1];
+        std::string anchorText = match[2];
+
+        anchorText = std::regex_replace(anchorText, std::regex("<[^>]*>"), "");
+
+        links += href + " -> " + anchorText + "\n";
+    }
 
     // 9. Remover títulos HTML h1-h6 e title
     html = std::regex_replace(
@@ -51,7 +70,7 @@ inline std::string cleanHTML(std::string html)
     html = std::regex_replace(
         html, std::regex(R"(\s+)"), " ");
 
-    return html;
+    return {html, links};
 }
 
 ToolResult InternalTools::getHTML(const std::string &arguments)
@@ -76,11 +95,18 @@ ToolResult InternalTools::getHTML(const std::string &arguments)
             }
         }
 
-        html = cleanHTML(html);
+        auto [cleanedHtml, links] = cleanHTML(html);
+
+        std::string response = std::format(R"(
+            url: {},
+            content: {}.
+            links: {}
+        )",
+                                           url, cleanedHtml, links);
 
         return {
             true,
-            url + ":" + html,
+            response,
             ""};
     }
     catch (const std::exception &e)

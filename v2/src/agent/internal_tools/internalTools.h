@@ -31,11 +31,18 @@ enum class ToolCaller
     System
 };
 
+enum class ToolKind
+{
+    Normal,
+    Plan
+};
+
 struct ToolResult
 {
     bool success = false;
     std::string output;
     std::string error;
+    ToolKind kind = ToolKind::Normal;
 };
 
 class InternalTools;
@@ -77,8 +84,9 @@ private:
     ToolResult readCode(const std::string &arguments);
     ToolResult getUrls(const std::string &arguments);
     ToolResult getHTML(const std::string &arguments);
+    ToolResult plan(const std::string &arguments);
 
-    inline static const std::array<ToolInfo, 9> TOOLS =
+    inline static const std::array<ToolInfo, 10> TOOLS =
         {{{"decide_think", ToolCaller::System, &InternalTools::decideThink},
           {"audioPlayer", ToolCaller::System, &InternalTools::audioPlayer},
           {"compressor", ToolCaller::System, &InternalTools::compressor},
@@ -87,7 +95,8 @@ private:
           {"listDirectory", ToolCaller::Model, &InternalTools::listDirectory},
           {"readCode", ToolCaller::Model, &InternalTools::readCode},
           {"getUrls", ToolCaller::Model, &InternalTools::getUrls},
-          {"getHTML", ToolCaller::Model, &InternalTools::getHTML}}};
+          {"getHTML", ToolCaller::Model, &InternalTools::getHTML},
+          {"plan", ToolCaller::Model, &InternalTools::plan}}};
 };
 
 #endif

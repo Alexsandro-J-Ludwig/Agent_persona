@@ -13,8 +13,6 @@ project(
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-
-# Gera compile_commands.json para VS Code / clangd
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ============================================================
@@ -22,10 +20,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # ============================================================
 
 include(FetchContent)
-
-# -------------------------
-# FTXUI
-# -------------------------
 
 FetchContent_Declare(
     ftxui
@@ -36,14 +30,7 @@ FetchContent_Declare(
 set(FTXUI_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(FTXUI_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(FTXUI_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-
-
 FetchContent_MakeAvailable(ftxui)
-
-# -------------------------
-# fmt
-# cpp-rich depende dele
-# -------------------------
 
 FetchContent_Declare(
     fmt
@@ -53,13 +40,7 @@ FetchContent_Declare(
 
 set(FMT_TEST OFF CACHE BOOL "" FORCE)
 set(FMT_DOC OFF CACHE BOOL "" FORCE)
-
 FetchContent_MakeAvailable(fmt)
-
-# -------------------------
-# MD4C
-# Parser Markdown / CommonMark
-# -------------------------
 
 FetchContent_Declare(
     md4c
@@ -68,36 +49,35 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
 )
 
-# Desabilita componentes extras do MD4C
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(MD4C_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-
 set(CMAKE_POLICY_VERSION_MINIMUM "3.5")
-
 FetchContent_MakeAvailable(md4c)
 
-# -------------------------
-# OpenSSL
-# Disponível no MSYS2/UCRT64
-# -------------------------
-
 find_package(OpenSSL REQUIRED)
-
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PORTAUDIO REQUIRED IMPORTED_TARGET portaudio-2.0)
 find_package(SndFile CONFIG REQUIRED)
 
-# Normaliza o prefixo MSYS2 (bin/../include) para não duplicar
-# o diretório implícito do compilador e quebrar include_next.
+# Normaliza caminhos do MSYS2 para evitar duplicação de include dirs.
 foreach(AUDIO_DEPENDENCY IN ITEMS SndFile::sndfile PkgConfig::PORTAUDIO)
-    get_target_property(AUDIO_INCLUDE_DIRS ${AUDIO_DEPENDENCY} INTERFACE_INCLUDE_DIRECTORIES)
+    get_target_property(
+        AUDIO_INCLUDE_DIRS
+        ${AUDIO_DEPENDENCY}
+        INTERFACE_INCLUDE_DIRECTORIES
+    )
+
     set(AUDIO_NORMALIZED_INCLUDE_DIRS "")
     foreach(AUDIO_INCLUDE_DIR IN LISTS AUDIO_INCLUDE_DIRS)
-        cmake_path(NORMAL_PATH AUDIO_INCLUDE_DIR OUTPUT_VARIABLE AUDIO_NORMALIZED_INCLUDE_DIR)
+        cmake_path(NORMAL_PATH AUDIO_INCLUDE_DIR
+            OUTPUT_VARIABLE AUDIO_NORMALIZED_INCLUDE_DIR)
         list(APPEND AUDIO_NORMALIZED_INCLUDE_DIRS "${AUDIO_NORMALIZED_INCLUDE_DIR}")
     endforeach()
-    set_property(TARGET ${AUDIO_DEPENDENCY} PROPERTY
-        INTERFACE_INCLUDE_DIRECTORIES "${AUDIO_NORMALIZED_INCLUDE_DIRS}")
+
+    set_property(
+        TARGET ${AUDIO_DEPENDENCY}
+        PROPERTY INTERFACE_INCLUDE_DIRECTORIES "${AUDIO_NORMALIZED_INCLUDE_DIRS}"
+    )
 endforeach()
 
 # ============================================================
@@ -105,7 +85,6 @@ endforeach()
 # ============================================================
 
 add_executable(agent
-
     # Entrada
     src/main.cpp
 
@@ -127,8 +106,14 @@ add_executable(agent
     # Chat
     src/chat/chat.cpp
 
-    # Terminal
+    # Terminal - implementação dividida por responsabilidade
     src/terminal/terminal.cpp
+    src/terminal/terminal_messages.cpp
+    src/terminal/terminal_tools.cpp
+    src/terminal/terminal_input.cpp
+    src/terminal/terminal_status.cpp
+    src/terminal/terminal_components.cpp
+    src/terminal/terminal_voice.cpp
 
     # Markdown
     src/markdown/markdownRenderer.cpp
@@ -147,6 +132,7 @@ add_executable(agent
     src/agent/internal_tools/impl/searchFiles.cpp
     src/agent/internal_tools/impl/getURL.cpp
     src/agent/internal_tools/impl/getHTML.cpp
+    src/agent/internal_tools/impl/plan.cpp
 
     # Internal Tools audio
     src/agent/internal_tools/audio/ttsService.cpp
@@ -159,67 +145,42 @@ add_executable(agent
 # HEADERS LOCAIS
 # ============================================================
 
-target_include_directories(
-    agent
+target_include_directories(agent
     PRIVATE
         ${CMAKE_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/libs
-
-        # Headers do MD4C
         ${md4c_SOURCE_DIR}/src
-
         ${CMAKE_SOURCE_DIR}/src/agent/internal_tools
 )
 
 # ============================================================
-# CPP-HTTPLIB
+# DEFINIÇÕES E BIBLIOTECAS
 # ============================================================
 
-target_compile_definitions(
-    agent
+target_compile_definitions(agent
     PRIVATE
         CPPHTTPLIB_OPENSSL_SUPPORT
 )
 
-# ============================================================
-# BIBLIOTECAS (Geral)
-# ============================================================
-
-target_link_libraries(
-    agent
+target_link_libraries(agent
     PRIVATE
-
-        # Interface do terminal
         ftxui::ftxui
-
-        # Formatação
         fmt::fmt
-
-        # Parser Markdown
         md4c
-
-        # HTTPS
         OpenSSL::SSL
         OpenSSL::Crypto
-
         PkgConfig::PORTAUDIO
         SndFile::sndfile
 )
 
-# ============================================================
-# WINDOWS (Configurações e Bibliotecas exclusivas)
-# ============================================================
-
 if(WIN32)
-    target_compile_definitions(
-        agent
+    target_compile_definitions(agent
         PRIVATE
             WIN32_LEAN_AND_MEAN
             NOMINMAX
     )
-    # Linka as libs do Windows apenas quando compilado nele
-    target_link_libraries(
-        agent
+
+    target_link_libraries(agent
         PRIVATE
             ws2_32
             crypt32

@@ -13,8 +13,13 @@ void HistoryManager::createHistory(
 }
 
 void HistoryManager::alterSystemHistory(
-    ModelRole role, bool thinking, bool toolsEnabled)
+    ModelRole role,
+    bool thinking,
+    bool toolsEnabled)
 {
+    if (history.empty())
+        throw std::logic_error("Historico ainda nao foi inicializado.");
+
     const std::string systemPrompt =
         properties.getSystemPrompt(role, thinking, toolsEnabled);
 
@@ -24,12 +29,17 @@ void HistoryManager::alterSystemHistory(
 std::size_t HistoryManager::estimateChars() const
 {
     std::size_t total = 0;
+
     for (const auto &msg : history)
     {
         total += msg.value("content", "").size();
+        total += msg.value("thinking", "").size();
+        total += msg.value("tool_name", "").size();
+
         if (msg.contains("tool_calls"))
             total += msg["tool_calls"].dump().size();
     }
+
     return total;
 }
 
@@ -37,34 +47,51 @@ void HistoryManager::addHistory(
     const std::string &role,
     const std::string &message,
     const Ollama::json &tool_calls,
-    const std::string &tool_name)
+    const std::string &tool_name,
+    const std::string &thinking)
 {
+    Ollama::json msg = {
+        {"role", role},
+        {"content", message}};
 
-    Ollama::json msg = {{"role", role}, {"content", message}};
+    // Preserva as chamadas feitas pelo assistente.
     if (!tool_calls.empty())
         msg["tool_calls"] = tool_calls;
 
+    // Identifica qual ferramenta produziu o resultado.
     if (!tool_name.empty())
         msg["tool_name"] = tool_name;
 
+    // Preserva o pensamento quando fornecido.
+    if (!thinking.empty())
+        msg["thinking"] = thinking;
+
     history.push_back(std::move(msg));
 
-    std::cerr << "\n========== LOG HISTORICO ==========\n"
-              << "[History] Role: " << role << '\n'
-              << "[History] Content: " << message << '\n'
-              << "===================================\n"
-              << std::flush;
+    std::cerr
+        << "\n========== LOG HISTORICO ==========\n"
+        << "[History] Role: " << role << '\n'
+        << "[History] Content: " << message << '\n'
+        << "[History] Tool calls: " << tool_calls.size() << '\n'
+        << "===================================\n"
+        << std::flush;
 }
 
 void HistoryManager::compressIfNeeded(ModelRole role)
 {
-    const std::size_t estTokens = static_cast<std::size_t>(estimateChars() / 3.5);
-    const std::size_t limit = static_cast<std::size_t>(getModel(role).num_ctx * 0.7);
+    if (history.size() <= 1)
+        return;
+
+    const std::size_t estTokens =
+        static_cast<std::size_t>(estimateChars() / 3.5);
+
+    const std::size_t limit =
+        static_cast<std::size_t>(
+            getModel(role).num_ctx * 0.7);
 
     if (estTokens > limit)
         compressor();
 }
-
 // ===========================================================
 // Comprensao de contexto
 // ===========================================================
@@ -75,9 +102,10 @@ void HistoryManager::compressor()
         history.end());
 
     auto summary = tools.execute(
-        ToolCaller::System,
-        "compressor",
-        Ollama::json(messages).dump()).get();
+                            ToolCaller::System,
+                            "compressor",
+                            Ollama::json(messages).dump())
+                       .get();
 
     if (!summary.success)
         throw std::runtime_error("Falha ao comprimir histórico: " + summary.error);
