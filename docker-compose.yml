@@ -51,34 +51,25 @@ services:
   # ============================================================
   # SEARXNG
   # ============================================================
+  # ============================================================
+  # SEARXNG
+  # ============================================================
   searxng:
     image: searxng/searxng:latest
     container_name: searxng
     restart: unless-stopped
 
+    ports:
+      - "8081:8080"
+
     volumes:
-      - searxng_config:/etc/searxng
+      - ./searxng:/etc/searxng
+
+    environment:
+      SEARXNG_BASE_URL: http://localhost:8081/
 
     networks:
       - ollama_network
-
-  # ============================================================
-  # CLOUDFLARE
-  # ============================================================
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: cloudflared
-    restart: unless-stopped
-
-    command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}
-
-    networks:
-      - ollama_network
-
-    depends_on:
-      - llama
-      - kokoro
-      - searxng
 
 volumes:
   searxng_config:

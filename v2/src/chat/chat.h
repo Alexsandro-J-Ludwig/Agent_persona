@@ -12,6 +12,11 @@ private:
 
     std::thread ai_thread;
     std::atomic<bool> processing{false};
+    std::optional<MessageId> current;
+    std::optional<MessageId> thinkCurrent;
+    std::optional<MessageId> toolsCurrent;
+
+    size_t toolCount = 0;
 
     void sendMessage(const std::string &prompt);
 

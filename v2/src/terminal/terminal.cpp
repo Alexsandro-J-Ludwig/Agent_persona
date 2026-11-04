@@ -1,384 +1,161 @@
-
 #include "terminal.h"
 
 #include <algorithm>
-#include <iostream>
+#include <exception>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
 
 using namespace ftxui;
 
-// ============================================================
-// MENSAGENS
-// ============================================================
-
-Component TerminalDisplay::initDisplay()
-{
-    return Renderer([]
-                    { return hbox({text("Bem-vindo!") | color(Color::Red),
-                                   text(" Envie: ") | color(Color::White),
-                                   text("/help") | color(Color::Magenta),
-                                   text(" - Para exibir todos os comandos") | color(Color::White)}); });
-}
-
-Component TerminalDisplay::thinkingStatus()
-{
-    return Renderer([this]
-                    {
-        if (!isGenerating.load())
-            return text("");
-
-        const auto elapsed =
-            std::chrono::duration_cast<std::chrono::seconds>(
-                std::chrono::steady_clock::now() - generationStart)
-                .count();
-
-        const auto minutes = elapsed / 60;
-        const auto seconds = elapsed % 60;
-
-        std::string time =
-            (minutes < 10 ? "0" : "") + std::to_string(minutes) + ":" +
-            (seconds < 10 ? "0" : "") + std::to_string(seconds);
-
-        const int frame = spinnerFrame.load();
-
-        return hbox({
-            spinner(2, frame) | bold | color(Color::Yellow2),
-            text(" Pensando... ") | color(Color::Yellow2),
-            text(time) | color(Color::White),
-        }); });
-}
-
-void TerminalDisplay::startThinking()
-{
-    generationStart = std::chrono::steady_clock::now();
-    isGenerating.store(true);
-
-    timerThread = std::jthread([this](std::stop_token stop)
-                               {
-    while (!stop.stop_requested() && isGenerating.load())
-    {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-        if (!stop.stop_requested() && isGenerating.load())
-        {
-            ++spinnerFrame;
-            screen.PostEvent(Event::Custom);
-        }
-    } });
-
-    screen.PostEvent(Event::Custom);
-}
-
-double TerminalDisplay::stopThinking()
-{
-    isGenerating.store(false);
-
-    if (timerThread.joinable())
-    {
-        timerThread.request_stop();
-        timerThread.join();
-    }
-
-    screen.PostEvent(Event::Custom);
-
-    return std::chrono::duration<double>(
-               std::chrono::steady_clock::now() - generationStart)
-        .count();
-}
-
-MessageId TerminalDisplay::addMessage(
-    const std::string &role,
-    const std::string &message)
-{
-    MessageId id;
-
-    {
-        std::lock_guard<std::mutex> lock(chat_mutex);
-
-        id = ++nextId;
-
-        ChatMessage entry{id, role, message};
-
-        entry.markdown.append(message);
-
-        if (role != "Assistant")
-            entry.markdown.finish();
-
-        messages.push_back(std::move(entry));
-    }
-
-    screen.PostEvent(Event::Custom);
-
-    return id;
-}
-
-void TerminalDisplay::appendChunk(
-    MessageId id,
-    const std::string &chunk)
-{
-    bool updated = false;
-
-    {
-        std::lock_guard<std::mutex> lock(chat_mutex);
-
-        for (auto &entry : messages)
-        {
-            if (entry.id == id)
-            {
-                entry.message += chunk;
-                entry.markdown.append(chunk);
-                updated = true;
-                break;
-            }
-        }
-    }
-
-    if (updated)
-        screen.PostEvent(Event::Custom);
-}
-
-// ============================================================
-// ENTRADA DO USUÁRIO
-// ============================================================
-
-Component TerminalDisplay::displayInput(
-    SubmitCallback onSubmit)
-{
-    auto input = Input(&prompt, "Pergunte à IA...");
-
-    auto renderer = Renderer(input, [input]
-                             { return hbox({text("User: ") | color(Color::Blue),
-                                            input->Render() | flex}) |
-                                      border; });
-
-    return CatchEvent(renderer, [this, onSubmit](Event event)
-                      {
-        if (event == Event::Return)
-        {
-            if (prompt.empty())
-                return true;
-
-            std::string submitted = prompt;
-            prompt.clear();
-
-            if (submitted == "/help")
-            {
-                showCommands = !showCommands;
-                screen.PostEvent(Event::Custom);
-                return true;
-            }
-
-            // Retorna ao final ao enviar nova mensagem.
-            scrollPosition = 1.0f;
-
-            onSubmit(submitted);
-            return true;
-        }
-
-        return false; });
-}
-
-// ============================================================
-// TABELA DE COMANDOS
-// ============================================================
-
-Element TerminalDisplay::commandView()
-{
-    auto table = Table({{"Commands", "Function"},
-                        {"/fast", "Force response speed"},
-                        {"/think", "Force thinking mode"},
-                        {"/models", "Exibe os modelos atuais"},
-                        {"/audio", "Ativa ou desativa o modo de audio"}});
-
-    table.SelectAll().Separator(LIGHT);
-
-    table.SelectRow(0).Decorate(bold);
-    table.SelectRow(0).Decorate(color(Color::Cyan));
-
-    table.SelectColumn(0).Decorate(color(Color::BlueLight));
-    table.SelectColumn(1).Decorate(color(Color::GrayLight));
-
-    return vbox({text("  COMANDOS DISPONÍVEIS") |
-                     bold |
-                     color(Color::Cyan),
-
-                 separator(),
-
-                 table.Render()}) |
-           borderRounded | bgcolor(Color::Palette256(235)) | size(WIDTH, GREATER_THAN, 48);
-}
-
-void TerminalDisplay::setStatus(const std::string &status)
-{
-    {
-        std::lock_guard<std::mutex> lock(chat_mutex);
-        statusMessage = status;
-    }
-
-    screen.PostEvent(Event::Custom);
-}
-
-void TerminalDisplay::setAudioStatus(const bool status)
-{
-    audioEnabled.store(status);
-
-    screen.PostEvent(Event::Custom);
-}
-
-// ============================================================
-// INTERFACE PRINCIPAL
-// ============================================================
-
 void TerminalDisplay::run(SubmitCallback onSubmit)
 {
-    // --------------------------------------------------------
-    // Renderização do histórico
-    // --------------------------------------------------------
+    // O container gerencia os componentes correspondentes às mensagens.
+    auto messageList = Container::Vertical({});
 
-    auto chatRenderer = Renderer([this]
-                                 {
-    Elements entries;
-
-    std::lock_guard<std::mutex> lock(chat_mutex);
-
-    for (const auto& entry : messages)
+    auto renderMessage = [this](MessageId id, bool thinking, bool showRole) -> Element
     {
-        entries.push_back(
-            vbox({
-                hbox({
-                    text(entry.role + ": ")
-                        | bold
-                        | color(entry.role == "User"
-                            ? Color::Blue
-                            : Color::Red),
+        ChatMessage msgCopy;
+        {
+            std::lock_guard<std::mutex> lock(chat_mutex);
 
-                    terminal_markdown::render(
-                        entry.markdown.document()
-                    ) | flex
-                }),
+            const auto it = std::find_if(
+                messages.begin(),
+                messages.end(),
+                [id](const ChatMessage &entry)
+                {
+                    return entry.id == id;
+                });
 
-                separator()
-            })
-        );
-    }
+            if (it == messages.end())
+                return text("");
 
-    return vbox(std::move(entries))
-    | focusPositionRelative(0.0f, scrollPosition)
-    | vscroll_indicator
-    | yframe
-    | flex; });
+            msgCopy = *it;
+        }
 
-    // --------------------------------------------------------
-    // Entrada
-    // --------------------------------------------------------
+        auto content = terminal_markdown::render(msgCopy.markdown.document());
 
-    auto input = displayInput(onSubmit);
+        if (thinking)
+            return vbox({content | color(Color::Grey0), separator()});
 
-    // --------------------------------------------------------
-    // Barra de status
-    // --------------------------------------------------------
+        if (!showRole)
+            return vbox({content, separator()});
+
+        auto roleElement = text(msgCopy.role + ": ");
+
+        if (msgCopy.role == "User")
+            roleElement = roleElement | color(Color::Cyan);
+        else if (msgCopy.role == "IA")
+            roleElement = roleElement | color(Color::Orange1);
+        else
+            roleElement = roleElement | color(Color::Red);
+
+        return vbox({hbox({roleElement, content | flex}), separator()});
+    };
+
+    auto createMessageComponent = [messageList, renderMessage, this](MessageId id)
+    {
+        std::string role;
+        std::string label;
+
+        {
+            std::lock_guard<std::mutex> lock(chat_mutex);
+
+            const auto it = std::find_if(
+                messages.begin(),
+                messages.end(),
+                [id](const ChatMessage &entry)
+                {
+                    return entry.id == id;
+                });
+
+            if (it == messages.end())
+                return;
+
+            role = it->role;
+            label = it->label;
+        }
+
+        const bool isThinking = role == "Thinking";
+        const bool isTools = role == "Tools";
+
+        if (isThinking || isTools)
+        {
+            if (label.empty())
+                label = isThinking ? "Pensamento" : "Tools";
+
+            auto body = Renderer([renderMessage, id, isThinking]
+            {
+                return renderMessage(id, isThinking, false);
+            });
+
+            messageList->Add(Collapsible(label, body));
+            return;
+        }
+
+        messageList->Add(Renderer([renderMessage, id]
+        {
+            return renderMessage(id, false, true);
+        }));
+    };
+
+    auto attachPendingMessages = [this, createMessageComponent]()
+    {
+        std::vector<MessageId> pending;
+
+        {
+            std::lock_guard<std::mutex> lock(chat_mutex);
+            pending.swap(pendingUiMessages);
+        }
+
+        for (const MessageId id : pending)
+            createMessageComponent(id);
+    };
+
+    attachPendingMessages();
+
+    auto chatRenderer = Renderer(messageList, [messageList, this]
+    {
+        return messageList->Render() |
+               focusPositionRelative(0.0f, scrollPosition) |
+               vscroll_indicator | yframe | flex;
+    });
+
+    auto input = displayInput(std::move(onSubmit));
 
     auto statusBar = Renderer([this]
-                              {
-    std::string status;
-
     {
-        std::lock_guard<std::mutex> lock(chat_mutex);
-        status = statusMessage;
-    }
+        std::string status;
+        {
+            std::lock_guard<std::mutex> lock(chat_mutex);
+            status = statusMessage;
+        }
 
-    return hbox({
-        text(" ◌ " + status)
-            | color(Color::Yellow),
-
-        filler(),
-
-        text("Modo de fala: ") | color(Color::Yellow2),
-        text(audioEnabled.load() ? "ativado" : "desativado")
-            | color(Color::Cyan),
-        text(" | "),
-
-        text("[Enter] Enviar")
-            | color(Color::Green),
-
-        text(" | [Ctrl + C] Sair")
-            | color(Color::Red)
-    })
-    | bgcolor(Color::Palette256(236)); });
-
-    // --------------------------------------------------------
-    // Eventos de rolagem
-    // --------------------------------------------------------
+        return hbox({
+                   text(" ◌ " + status) | color(Color::Yellow),
+                   filler(),
+                   text("Modo de fala: ") | color(Color::Yellow2),
+                   text(audioEnabled.load() ? "ativado" : "desativado") | color(Color::Cyan),
+                   text(" | "),
+                   text("[Enter] Enviar") | color(Color::Green),
+                   text(" | [Ctrl + C] Sair") | color(Color::Red),
+               }) |
+               bgcolor(Color::Palette256(236));
+    });
 
     auto chatScroll = CatchEvent(chatRenderer, [this](Event event)
-                                 {
-        // Teclado
+    {
         if (event == Event::PageUp)
         {
-            scrollPosition = std::max(
-                0.0f, scrollPosition - 0.25f);
+            scrollPosition = std::max(0.0f, scrollPosition - 0.25f);
             return true;
         }
 
         if (event == Event::PageDown)
         {
-            scrollPosition = std::min(
-                1.0f, scrollPosition + 0.25f);
-            return true;
-        }
-
-        if (event == Event::Home)
-        {
-            scrollPosition = 0.0f;
-            return true;
-        }
-
-        if (event == Event::End)
-        {
-            scrollPosition = 1.0f;
-            return true;
-        }
-
-        // Mouse
-        if (event.is_mouse())
-        {
-            if (event.mouse().button == Mouse::WheelUp)
-            {
-                scrollPosition = std::max(
-                    0.0f, scrollPosition - 0.05f);
-                return true;
-            }
-
-            if (event.mouse().button == Mouse::WheelDown)
-            {
-                scrollPosition = std::min(
-                    1.0f, scrollPosition + 0.05f);
-                return true;
-            }
-        }
-
-        return false; });
-
-    // --------------------------------------------------------
-    // Layout e eventos globais
-    // --------------------------------------------------------
-
-    auto layout = Container::Vertical({chatScroll,
-                                       input});
-
-    // Permite rolar mesmo quando o input está focado.
-    auto events = CatchEvent(layout, [this](Event event)
-                             {
-        if (event == Event::PageUp)
-        {
-            scrollPosition = std::max(
-                0.0f, scrollPosition - 0.25f);
-            return true;
-        }
-
-        if (event == Event::PageDown)
-        {
-            scrollPosition = std::min(
-                1.0f, scrollPosition + 0.25f);
+            scrollPosition = std::min(1.0f, scrollPosition + 0.25f);
             return true;
         }
 
@@ -398,61 +175,151 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
         {
             if (event.mouse().button == Mouse::WheelUp)
             {
-                scrollPosition = std::max(
-                    0.0f, scrollPosition - 0.05f);
+                scrollPosition = std::max(0.0f, scrollPosition - 0.05f);
                 return true;
             }
 
             if (event.mouse().button == Mouse::WheelDown)
             {
-                scrollPosition = std::min(
-                    1.0f, scrollPosition + 0.05f);
+                scrollPosition = std::min(1.0f, scrollPosition + 0.05f);
                 return true;
             }
         }
 
-        return false; });
+        return false;
+    });
+
+    int voiceSplitSize = 105;
+    auto voiceRenderer = Renderer([this]
+    {
+        return voiceView();
+    });
+
+    auto voiceLayout = ResizableSplitLeft(chatScroll, voiceRenderer, &voiceSplitSize);
+    auto layout = Container::Vertical({voiceLayout, input});
+
+    auto events = CatchEvent(layout, [this, attachPendingMessages](Event event)
+    {
+        if (event == Event::Custom)
+            attachPendingMessages();
+
+        if (audioEnabled.load())
+            return false;
+
+        // Navegação também funciona quando o painel de voz não está visível.
+        if (event == Event::PageUp)
+        {
+            scrollPosition = std::max(0.0f, scrollPosition - 0.25f);
+            return true;
+        }
+
+        if (event == Event::PageDown)
+        {
+            scrollPosition = std::min(1.0f, scrollPosition + 0.25f);
+            return true;
+        }
+
+        if (event == Event::Home)
+        {
+            scrollPosition = 0.0f;
+            return true;
+        }
+
+        if (event == Event::End)
+        {
+            scrollPosition = 1.0f;
+            return true;
+        }
+
+        if (event.is_mouse())
+        {
+            if (event.mouse().button == Mouse::WheelUp)
+            {
+                scrollPosition = std::max(0.0f, scrollPosition - 0.05f);
+                return true;
+            }
+
+            if (event.mouse().button == Mouse::WheelDown)
+            {
+                scrollPosition = std::min(1.0f, scrollPosition + 0.05f);
+                return true;
+            }
+        }
+
+        return false;
+    });
 
     auto init = initDisplay();
-    auto ts = thinkingStatus();
-
-    // --------------------------------------------------------
-    // Renderização final
-    // --------------------------------------------------------
+    auto thinking = thinkingStatus();
 
     auto renderer = Renderer(events, [&]
-                             {
-    Elements elements;
+    {
+        Elements elements;
 
-    // Conversa ocupa o espaço disponível.
-    elements.push_back(
-        init -> Render() | flex
-    );
+        if (audioEnabled.load())
+        {
+            elements.push_back(voiceLayout->Render() | flex);
 
-    elements.push_back(
-        chatScroll->Render() | flex
-    );
+            if (showCommands)
+                elements.push_back(commandView());
 
-    // Comandos opcionais.
-    if (showCommands)
-        elements.push_back(commandView());
+            elements.push_back(input->Render());
+            elements.push_back(thinking->Render());
+            elements.push_back(statusBar->Render());
 
-    // Entrada fixa.
-    elements.push_back(
-        input->Render()
-    );
+            return vbox(std::move(elements)) |
+                   flex | borderRounded |
+                   color(Color::RGB(150, 210, 245)) |
+                   bgcolor(Color::Black);
+        }
 
-    elements.push_back(
-        ts->Render()
-    );
+        elements.push_back(init->Render() | flex);
+        elements.push_back(chatScroll->Render() | flex);
 
-    // Barra de status fixa.
-    elements.push_back(
-        statusBar->Render()
-    );
+        if (showCommands)
+            elements.push_back(commandView());
 
-    return vbox(std::move(elements)) | flex; });
+        elements.push_back(input->Render());
+        elements.push_back(thinking->Render());
+        elements.push_back(statusBar->Render());
+
+        return vbox(std::move(elements)) | flex;
+    });
 
     screen.TrackMouse(true);
-    screen.Loop(renderer);
+    input->TakeFocus();
+
+    // Atualiza o canvas de voz sem bloquear o loop principal da interface.
+    if (voiceAnimation.joinable())
+    {
+        voiceAnimation.request_stop();
+        voiceAnimation.join();
+    }
+
+    voiceAnimation = std::jthread([this](std::stop_token stop)
+    {
+        while (!stop.stop_requested())
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(40));
+
+            if (!stop.stop_requested() && audioEnabled.load())
+                screen.PostEvent(Event::Custom);
+        }
+    });
+
+    try
+    {
+        screen.Loop(renderer);
+    }
+    catch (...)
+    {
+        voiceAnimation.request_stop();
+        if (voiceAnimation.joinable())
+            voiceAnimation.join();
+        throw;
+    }
+
+    voiceAnimation.request_stop();
+    if (voiceAnimation.joinable())
+        voiceAnimation.join();
 }

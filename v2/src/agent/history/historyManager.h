@@ -7,7 +7,7 @@
 #include <vector>
 #include <string>
 
-class InternalTools;
+// class InternalTools;
 
 class HistoryManager
 {
@@ -17,20 +17,23 @@ public:
     void createHistory(ModelRole role, bool thinking);
     void alterSystemHistory(ModelRole role, bool thinking, bool toolsEnabled = true);
 
-    void addHistory(const std::string &role,
-                    const std::string &message,
-                    const Ollama::json &tool_calls = Ollama::json::array(),
-                    const std::string &tool_name = "");
+    void addHistory(
+        const std::string &role,
+        const std::string &message,
+        const Ollama::json &tool_calls = Ollama::json::array(),
+        const std::string &tool_name = "",
+        const std::string &thinking = "");
 
     void compressIfNeeded(ModelRole role);
 
     const std::vector<Ollama::json> &getHistory() const;
 
 private:
+    InternalTools &tools;
+
     void compressor();
     std::size_t estimateChars() const;
 
-    InternalTools &tools;
     std::vector<Ollama::json> history;
     const Config::Properties properties;
 };
