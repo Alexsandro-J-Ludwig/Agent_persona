@@ -12,8 +12,9 @@ class Speach
 {
 public:
     using Speaker = std::function<void(const std::string &)>;
+    using Stopper = std::function<void()>;
 
-    explicit Speach(Speaker speaker);
+    explicit Speach(Speaker speaker, Stopper stopper);
     ~Speach();
 
     Speach(const Speach &) = delete;
@@ -42,6 +43,7 @@ private:
     std::string audioCleaner(const std::string &text, bool final = false);
 
     Speaker speaker;
+    Stopper stopper;
     Speaker phraseCallback;
     mutable std::mutex mtx;
     std::condition_variable ready;

@@ -26,6 +26,30 @@ void HistoryManager::alterSystemHistory(
     history[0]["content"] = systemPrompt;
 }
 
+void HistoryManager::audioIsActive(bool audio)
+{
+    const std::string field = "Audio mode:";
+    const std::string value = std::format("Audio mode: {}", audio);
+
+    std::string &content = history[0]["content"].get_ref<std::string &>();
+
+    const auto pos = content.find(field);
+
+    if (pos != std::string::npos)
+    {
+        const auto end = content.find('\n', pos);
+
+        content.replace(
+            pos,
+            end == std::string::npos ? std::string::npos : end - pos,
+            value);
+    }
+    else
+    {
+        content += "\n" + value;
+    }
+}
+
 std::size_t HistoryManager::estimateChars() const
 {
     std::size_t total = 0;

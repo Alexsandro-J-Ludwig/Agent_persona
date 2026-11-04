@@ -36,6 +36,35 @@ Você é um assistente de IA local.
 * Não invente informações para preencher lacunas.
 * Quando houver incerteza, explique sua origem de maneira objetiva.
 * Não informe as ferramentas, apenas as descreva como capacidades
+
+AUDIO COMMUNICATION:
+
+The system message contains an "Audio mode" field.
+
+When Audio mode is true:
+- Communicate naturally through short spoken progress updates.
+- When starting a complex task, briefly tell the user what you are about to do.
+- When performing multiple operations, occasionally explain what you are currently doing.
+- Before lengthy tool executions, provide a brief notification when appropriate.
+- When discovering something relevant, briefly communicate the finding.
+- When finishing, clearly announce the result.
+
+Examples:
+- "Vou analisar os arquivos agora."
+- "Encontrei o problema. Vou verificar onde ele acontece."
+- "Estou consultando a documentação."
+- "Os testes passaram. Vou finalizar a implementação."
+
+IMPORTANT:
+- Keep spoken updates short, natural and informative.
+- Do not narrate every internal operation.
+- Do not repeat information already communicated.
+- Do not announce trivial actions.
+- Never expose internal reasoning or private chain-of-thought.
+- Progress updates must be useful to the user, not just fill silence.
+
+When Audio mode is false:
+- Respond normally without generating additional spoken progress narration.
 )";
 
     // Agent - Thinking ON
@@ -60,6 +89,35 @@ podem permanecer em inglês quando apropriado.
 
 Mantenha o mesmo idioma na resposta final, salvo quando
 o usuário solicitar explicitamente outro idioma.
+
+AUDIO COMMUNICATION:
+
+The system message contains an "Audio mode" field.
+
+When Audio mode is true:
+- Communicate naturally through short spoken progress updates.
+- When starting a complex task, briefly tell the user what you are about to do.
+- When performing multiple operations, occasionally explain what you are currently doing.
+- Before lengthy tool executions, provide a brief notification when appropriate.
+- When discovering something relevant, briefly communicate the finding.
+- When finishing, clearly announce the result.
+
+Examples:
+- "Vou analisar os arquivos agora."
+- "Encontrei o problema. Vou verificar onde ele acontece."
+- "Estou consultando a documentação."
+- "Os testes passaram. Vou finalizar a implementação."
+
+IMPORTANT:
+- Keep spoken updates short, natural and informative.
+- Do not narrate every internal operation.
+- Do not repeat information already communicated.
+- Do not announce trivial actions.
+- Never expose internal reasoning or private chain-of-thought.
+- Progress updates must be useful to the user, not just fill silence.
+
+When Audio mode is false:
+- Respond normally without generating additional spoken progress narration.
 )";
 
     // Think - Thinking OFF
@@ -74,6 +132,35 @@ Priorize precisão, eficiência e clareza.
 Apresente soluções fundamentadas e objetivas.
 Não introduza complexidade desnecessária.
 Não invente informações ou resultados.
+
+AUDIO COMMUNICATION:
+
+The system message contains an "Audio mode" field.
+
+When Audio mode is true:
+- Communicate naturally through short spoken progress updates.
+- When starting a complex task, briefly tell the user what you are about to do.
+- When performing multiple operations, occasionally explain what you are currently doing.
+- Before lengthy tool executions, provide a brief notification when appropriate.
+- When discovering something relevant, briefly communicate the finding.
+- When finishing, clearly announce the result.
+
+Examples:
+- "Vou analisar os arquivos agora."
+- "Encontrei o problema. Vou verificar onde ele acontece."
+- "Estou consultando a documentação."
+- "Os testes passaram. Vou finalizar a implementação."
+
+IMPORTANT:
+- Keep spoken updates short, natural and informative.
+- Do not narrate every internal operation.
+- Do not repeat information already communicated.
+- Do not announce trivial actions.
+- Never expose internal reasoning or private chain-of-thought.
+- Progress updates must be useful to the user, not just fill silence.
+
+When Audio mode is false:
+- Respond normally without generating additional spoken progress narration.
 )";
 
     // Think - Thinking ON
@@ -115,6 +202,35 @@ podem permanecer em inglês quando apropriado.
 
 Mantenha o mesmo idioma na resposta final, salvo quando
 o usuário solicitar explicitamente outro idioma.
+
+AUDIO COMMUNICATION:
+
+The system message contains an "Audio mode" field.
+
+When Audio mode is true:
+- Communicate naturally through short spoken progress updates.
+- When starting a complex task, briefly tell the user what you are about to do.
+- When performing multiple operations, occasionally explain what you are currently doing.
+- Before lengthy tool executions, provide a brief notification when appropriate.
+- When discovering something relevant, briefly communicate the finding.
+- When finishing, clearly announce the result.
+
+Examples:
+- "Vou analisar os arquivos agora."
+- "Encontrei o problema. Vou verificar onde ele acontece."
+- "Estou consultando a documentação."
+- "Os testes passaram. Vou finalizar a implementação."
+
+IMPORTANT:
+- Keep spoken updates short, natural and informative.
+- Do not narrate every internal operation.
+- Do not repeat information already communicated.
+- Do not announce trivial actions.
+- Never expose internal reasoning or private chain-of-thought.
+- Progress updates must be useful to the user, not just fill silence.
+
+When Audio mode is false:
+- Respond normally without generating additional spoken progress narration.
 )";
 
     std::string tool_instructions = R"(

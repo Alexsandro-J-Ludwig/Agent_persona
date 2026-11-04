@@ -7,17 +7,31 @@
 Orquestrador::Orquestrador()
     : router(tools),
       manager(tools),
-      speech([this](const std::string &phrase)
-             {
-                 auto future = tools.execute(
-                     ToolCaller::System,
-                     "audioPlayer",
-                     phrase);
+      speech(
+          [this](const std::string &phrase)
+          {
+              auto future = tools.execute(
+                  ToolCaller::System,
+                  "audioPlayer",
+                  phrase);
 
-                 ToolResult result = future.get();
+              ToolResult result = future.get();
 
-                 if (!result.success)
-                     throw std::runtime_error(result.error); }),
+              if (!result.success)
+                  throw std::runtime_error(result.error);
+          },
+          [this]()
+          {
+              auto future = tools.execute(
+                  ToolCaller::System,
+                  "stopAudio",
+                  "");
+
+              ToolResult result = future.get();
+
+              if (!result.success)
+                  throw std::runtime_error(result.error);
+          }),
       taskManager(tools)
 {
 }
@@ -88,6 +102,7 @@ std::string Orquestrador::run(
             role,
             thinking,
             toolsAllowed);
+        manager.audioIsActive(audio);
 
         ChatResult result = ollama.chatStream(
             model,

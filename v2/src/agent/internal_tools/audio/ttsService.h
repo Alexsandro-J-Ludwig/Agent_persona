@@ -4,11 +4,12 @@
 #include <cstdio>
 #include <mutex>
 #include <string>
+#include "platform.h"
 
 class TTSService
 {
 private:
-    FILE *piper_stream = nullptr;
+    platform::PipeProcess pipeline;
     std::mutex stream_mutex;
     std::string model_path;
     int sample_rate = 22050;
@@ -24,6 +25,8 @@ public:
     TTSService &operator=(const TTSService &) = delete;
 
     bool speak(const std::string &text);
+
+    void stop();
 };
 
 #endif // TTSSERVICE_H

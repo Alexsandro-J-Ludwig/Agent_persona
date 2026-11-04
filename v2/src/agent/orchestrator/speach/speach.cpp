@@ -2,12 +2,15 @@
 #include <iostream>
 #include <stdexcept>
 #include <utility>
+#include "src/agent/internal_tools/audio/ttsService.h"
 
-Speach::Speach(Speaker speaker)
-    : speaker(std::move(speaker))
+Speach::Speach(Speaker speaker, Stopper stopper)
+    : speaker(std::move(speaker)),
+      stopper(std::move(stopper))
 {
     if (!this->speaker)
         throw std::invalid_argument("Speach precisa de uma função de reprodução.");
+
     worker = std::thread(&Speach::consume, this);
 }
 
@@ -94,10 +97,17 @@ void Speach::wait()
 // ===================================================
 void Speach::cancelPending()
 {
-    std::lock_guard lock(mtx);
-    phrases.clear();
-    if (!active)
-        idle.notify_all();
+    {
+        std::lock_guard<std::mutex> lock(mtx);
+        phrases.clear();
+        pendingSpeech.clear();
+        markdownBuffer.clear();
+    }
+
+    if (stopper)
+        stopper();
+
+    idle.notify_all();
 }
 
 // ===================================================

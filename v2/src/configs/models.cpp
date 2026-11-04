@@ -1,7 +1,7 @@
 #include "models.h"
 
 const std::array<Model, MODEL_COUNT> MODEL_LIST =
-    
+    /*
         // =========== LOCAL =================
         {{{
               "beam:cloud",
@@ -18,7 +18,7 @@ const std::array<Model, MODEL_COUNT> MODEL_LIST =
            131072,
            0},
 
-        /*   
+          */
     // ============ REMOTE ==================
     {{{
           "qwen3.5-9B:latest",
@@ -34,7 +34,7 @@ const std::array<Model, MODEL_COUNT> MODEL_LIST =
        32768,
        16384,
        0},
-*/
+
       {"libs/piper/piper-models/pt_BR-faber-medium.onnx",
        ModelRole::TTS,
        ModelBackend::TTSService,
