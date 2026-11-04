@@ -9,7 +9,7 @@ namespace Config
 {
   struct Properties
   {
-    static constexpr std::size_t max_rounds = 8;
+    static constexpr std::size_t max_rounds = 64;
     static constexpr std::size_t max_bytes = 64 * 2048;
 
     std::string agent_fast = R"(
@@ -138,6 +138,8 @@ Você pode solicitar múltiplas ferramentas em uma mesma resposta.
   ou escolha outra abordagem.
 - Não solicite ferramentas quando puder responder adequadamente
   sem utilizá-las.
+
+Sempre que uma ou mais tarefas forem bloqueadas, reavalie a estratégia de execução. Analise os motivos dos bloqueios, considere abordagens alternativas e determine se é possível reformular as tarefas ou gerar um novo plano. Não abandone o objetivo original apenas porque uma abordagem falhou.
 )";
 
     std::string getSystemPrompt(ModelRole role, bool thinking, bool toolsEnabled) const
