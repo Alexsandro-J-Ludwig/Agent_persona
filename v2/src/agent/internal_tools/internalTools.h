@@ -78,8 +78,10 @@ private:
     ToolResult readCode(const std::string &arguments);
     ToolResult getUrls(const std::string &arguments);
     ToolResult getHTML(const std::string &arguments);
+    ToolResult makeDir(const std::string &arguments);
+    ToolResult writeFile(const std::string &arguments);
 
-    inline static const std::array<ToolInfo, 10> TOOLS =
+    inline static const std::array<ToolInfo, 12> TOOLS =
         {{{"decide_think", ToolCaller::System, &InternalTools::decideThink},
           {"audioPlayer", ToolCaller::System, &InternalTools::audioPlayer},
           {"stopAudio", ToolCaller::System, &InternalTools::stopAudio},
@@ -89,7 +91,9 @@ private:
           {"listDirectory", ToolCaller::Model, &InternalTools::listDirectory},
           {"readCode", ToolCaller::Model, &InternalTools::readCode},
           {"getUrls", ToolCaller::Model, &InternalTools::getUrls},
-          {"getHTML", ToolCaller::Model, &InternalTools::getHTML}}};
+          {"getHTML", ToolCaller::Model, &InternalTools::getHTML},
+          {"makeDir", ToolCaller::Model, &InternalTools::makeDir},
+          {"writeFile", ToolCaller::Model, &InternalTools::writeFile}}};
 };
 
 #endif

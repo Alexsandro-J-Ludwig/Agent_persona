@@ -116,6 +116,26 @@ namespace ToolSchemas
             json::array({"url"}));
     }
 
+    inline json makeDir()
+    {
+        return makeTool(
+            "makeDir",
+            "Create a directory inside the workspace. Path is relative to the workspace root.",
+            json::object({{"path", prop("string", "Relative path of the directory to create, e.g. 'notes/2026'")}}),
+            json::array({"path"}));
+    }
+
+    inline json writeFile()
+    {
+        return makeTool(
+            "writeFile",
+            "Create a file (now, only markdown) inside the workspace. Fails if the file already exists.",
+            json::object({{"fileName", prop("string", "Relative file name WITHOUT extension, e.g. 'notes/todo'")},
+                          {"extension", prop("string", "File extension. Only '.md' is allowed")},
+                          {"content", prop("string", "Full text content of the file (max 200000 bytes)")}}),
+            json::array({"fileName", "extension", "content"}));
+    }
+
     inline const json &all()
     {
         static const json schemas = json::array({calculator(),
@@ -123,7 +143,9 @@ namespace ToolSchemas
                                                  listDirectory(),
                                                  readCode(),
                                                  getUrls(),
-                                                 getHTML()});
+                                                 getHTML(),
+                                                 makeDir(),
+                                                 writeFile()});
         return schemas;
     }
 }
