@@ -31,13 +31,15 @@ public:
         bool thinking,
         bool audio,
         Ollama::StreamCallback onChunk,
-        ToolCallback onTool = {}
-    );
+        Ollama::ThinkCallback thinkChunk,
+        ToolCallback onTool = {});
 
     std::tuple<ModelRole, bool, bool, std::string> selectModel(
         const std::string &prompt);
 
     void setAudioEnabled(bool enabled);
+    // ====== OBSERVADOR GENÉRICO DA FILA DE FALA ======
+    void setSpeechCallback(Speach::Speaker callback);
 };
 
 #endif

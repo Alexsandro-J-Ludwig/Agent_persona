@@ -26,15 +26,23 @@ public:
     void flush();
     void cancelPending();
     std::string lastError() const;
+    // ====== OBSERVADOR DAS FRASES ENVIADAS AO TTS ======
+    void setPhraseCallback(Speaker callback);
 
 private:
     void consume();
     bool insideCodeBlock = false;
+    // ====== ESTADO DO MARKDOWN ENTRE CHUNKS ======
+    bool atLineStart = true;
+    char fenceMarker = '`';
+    std::size_t fenceLength = 3;
+    std::string markdownBuffer;
     std::string pendingSpeech;
 
-    std::string audioCleaner(const std::string &text);
+    std::string audioCleaner(const std::string &text, bool final = false);
 
     Speaker speaker;
+    Speaker phraseCallback;
     mutable std::mutex mtx;
     std::condition_variable ready;
     std::condition_variable idle;

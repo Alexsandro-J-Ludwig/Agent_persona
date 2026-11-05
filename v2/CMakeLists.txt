@@ -113,6 +113,7 @@ add_executable(agent
     src/configs/models.cpp
     src/configs/dotenv.cpp
     src/configs/httplibconfig.cpp
+    src/configs/searxng.cpp
 
     # Ollama
     src/ollama/ollama.cpp
@@ -136,6 +137,17 @@ add_executable(agent
     # Internal Tools
     src/agent/internal_tools/internalTools.cpp
 
+    # Tools
+    src/agent/internal_tools/impl/audioPlayer.cpp
+    src/agent/internal_tools/impl/calculator.cpp
+    src/agent/internal_tools/impl/compressor.cpp
+    src/agent/internal_tools/impl/decideThink.cpp
+    src/agent/internal_tools/impl/listDirectory.cpp
+    src/agent/internal_tools/impl/readCode.cpp
+    src/agent/internal_tools/impl/searchFiles.cpp
+    src/agent/internal_tools/impl/getURL.cpp
+    src/agent/internal_tools/impl/getHTML.cpp
+
     # Internal Tools audio
     src/agent/internal_tools/audio/ttsService.cpp
 
@@ -155,6 +167,8 @@ target_include_directories(
 
         # Headers do MD4C
         ${md4c_SOURCE_DIR}/src
+
+        ${CMAKE_SOURCE_DIR}/src/agent/internal_tools
 )
 
 # ============================================================

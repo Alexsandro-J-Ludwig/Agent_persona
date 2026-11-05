@@ -3,6 +3,9 @@
 
 #include <algorithm>
 #include <iostream>
+#include <cmath>
+#include <numbers>
+#include <ftxui/dom/canvas.hpp>
 
 using namespace ftxui;
 
@@ -67,7 +70,6 @@ void TerminalDisplay::startThinking()
 
     screen.PostEvent(Event::Custom);
 }
-
 double TerminalDisplay::stopThinking()
 {
     isGenerating.store(false);
@@ -87,7 +89,9 @@ double TerminalDisplay::stopThinking()
 
 MessageId TerminalDisplay::addMessage(
     const std::string &role,
-    const std::string &message)
+    const std::string &message,
+    bool streaming,
+    std::string label)
 {
     MessageId id;
 
@@ -96,14 +100,22 @@ MessageId TerminalDisplay::addMessage(
 
         id = ++nextId;
 
-        ChatMessage entry{id, role, message};
+        ChatMessage entry;
+        entry.id = id;
+        entry.role = role;
+        entry.message = message;
+        entry.label = std::move(label);
 
         entry.markdown.append(message);
 
-        if (role != "Assistant")
+        if (!streaming)
+        {
             entry.markdown.finish();
+            entry.finished = true;
+        }
 
         messages.push_back(std::move(entry));
+        pendingUiMessages.push_back(id);
     }
 
     screen.PostEvent(Event::Custom);
@@ -115,25 +127,147 @@ void TerminalDisplay::appendChunk(
     MessageId id,
     const std::string &chunk)
 {
-    bool updated = false;
+    if (chunk.empty())
+        return;
 
     {
         std::lock_guard<std::mutex> lock(chat_mutex);
 
-        for (auto &entry : messages)
-        {
-            if (entry.id == id)
+        auto it = std::find_if(
+            messages.begin(),
+            messages.end(),
+            [id](const ChatMessage &entry)
             {
-                entry.message += chunk;
-                entry.markdown.append(chunk);
-                updated = true;
-                break;
-            }
-        }
+                return entry.id == id;
+            });
+
+        if (it == messages.end() || it->finished)
+            return;
+
+        it->message += chunk;
+        it->markdown.append(chunk);
     }
 
-    if (updated)
-        screen.PostEvent(Event::Custom);
+    screen.PostEvent(Event::Custom);
+}
+
+void TerminalDisplay::finishMessage(MessageId id)
+{
+    {
+        std::lock_guard<std::mutex> lock(chat_mutex);
+
+        auto it = std::find_if(
+            messages.begin(),
+            messages.end(),
+            [id](const ChatMessage &entry)
+            {
+                return entry.id == id;
+            });
+
+        if (it == messages.end() || it->finished)
+            return;
+
+        it->markdown.finish();
+        it->finished = true;
+    }
+
+    screen.PostEvent(Event::Custom);
+}
+
+void TerminalDisplay::appendToolResult(
+    const std::string &name,
+    bool success,
+    const std::string &output,
+    const std::string &error)
+{
+    MessageId id;
+    std::size_t index;
+
+    {
+        std::lock_guard<std::mutex> lock(chat_mutex);
+
+        // Cria o agrupador apenas na primeira chamada.
+        if (!toolGroupMessage)
+        {
+            id = ++nextId;
+
+            ChatMessage entry;
+            entry.id = id;
+            entry.role = "Tools";
+            entry.message = "";
+            entry.label = "Tools";
+
+            messages.push_back(std::move(entry));
+            pendingUiMessages.push_back(id);
+
+            toolGroupMessage = id;
+            toolCount = 0;
+        }
+        else
+        {
+            id = *toolGroupMessage;
+        }
+
+        index = ++toolCount;
+    }
+
+    // A formatação pertence ao TerminalDisplay.
+    std::string entry;
+
+    entry += "\n\n";
+    entry += "**(" + std::to_string(index) + ") " + name + "**";
+    entry += (success ? " [OK]\n\n" : " [ERRO]\n\n");
+
+    if (!output.empty())
+    {
+        entry += "**Saída:**\n\n";
+        entry += output;
+        entry += "\n\n";
+    }
+
+    if (!success && !error.empty())
+    {
+        entry += "**Erro:**\n\n";
+        entry += error;
+        entry += "\n\n";
+    }
+
+    if (success && output.empty())
+        entry += "Sem saída retornada.\n\n";
+
+    // Reutiliza o mesmo MessageId para todas as ferramentas.
+    appendChunk(id, entry);
+}
+
+void TerminalDisplay::finishToolGroup()
+{
+    {
+        std::lock_guard<std::mutex> lock(chat_mutex);
+
+        if (!toolGroupMessage)
+            return;
+
+        const MessageId id = *toolGroupMessage;
+
+        auto it = std::find_if(
+            messages.begin(),
+            messages.end(),
+            [id](const ChatMessage &entry)
+            {
+                return entry.id == id;
+            });
+
+        if (it != messages.end() && !it->finished)
+        {
+            it->markdown.finish();
+            it->finished = true;
+        }
+
+        toolGroupMessage.reset();
+        toolCount = 0;
+    }
+
+    screen.PostEvent(Event::Custom);
 }
 
 // ============================================================
@@ -220,8 +354,130 @@ void TerminalDisplay::setStatus(const std::string &status)
 void TerminalDisplay::setAudioStatus(const bool status)
 {
     audioEnabled.store(status);
+    // ====== LIMPEZA DA FILA VISUAL AO SAIR DO MODO VOZ ======
+    if (!status)
+    {
+        std::lock_guard lock(chat_mutex);
+        speechCaptions.clear();
+        lastCaption.clear();
+    }
 
     screen.PostEvent(Event::Custom);
+}
+
+// ====== FILA VISUAL COM DURAÇÃO ESTIMADA, SEM BLOQUEAR O TTS ======
+void TerminalDisplay::showSpeechPhrase(const std::string &phrase)
+{
+    if (phrase.find_first_not_of(" \t\r\n") == std::string::npos)
+        return;
+    {
+        std::lock_guard lock(chat_mutex);
+
+        if (!audioEnabled.load())
+            return;
+        if (speechCaptions.empty())
+            captionStart = std::chrono::steady_clock::now();
+        speechCaptions.push_back(phrase);
+    }
+    screen.PostEvent(Event::Custom);
+}
+
+// ============================================================
+// CANVAS DE VOZ: CIRCUNFERÊNCIA RGB E LEGENDA DA RESPOSTA
+// ============================================================
+Element TerminalDisplay::voiceView()
+{
+    const auto now = std::chrono::steady_clock::now();
+
+    const double time =
+        std::chrono::duration<double>(now.time_since_epoch()).count();
+
+    const bool generating = isGenerating.load();
+
+    bool speaking = false;
+
+    {
+        std::lock_guard lock(chat_mutex);
+        speaking = !speechCaptions.empty();
+    }
+
+    // ====== GEOMETRIA DO ORBE ======
+    const int columns =
+        std::max(1, voiceBox.x_max - voiceBox.x_min + 1);
+
+    const int rows =
+        std::max(1, voiceBox.y_max - voiceBox.y_min + 1);
+
+    Canvas drawing(columns * 16, rows * 64);
+
+    const double radius =
+        std::max(0.5, std::min(columns * 0.78, rows * 1.45));
+
+    const double amplitude = speaking ? 0.055 : 0.018;
+
+    // ====== ANIMAÇÃO ======
+    for (int point = 0; point < 180; ++point)
+    {
+        const double angle =
+            point * 2.0 * std::numbers::pi / 180.0;
+
+        const double wave =
+            0.65 * std::sin(4.0 * angle + time * 3.5) +
+            0.25 * std::cos(9.0 * angle - time * 2.4);
+
+        const double r =
+            radius *
+            (1.0 + amplitude * wave +
+             0.012 * std::sin(time * 1.6));
+
+        const int x = static_cast<int>(
+            columns + r * std::cos(angle));
+
+        const int y = static_cast<int>(
+            rows * 2 + r * std::sin(angle));
+
+        const int red = static_cast<int>(
+            45 + 40 * std::sin(angle + time));
+
+        const int green = static_cast<int>(
+            195 + 50 * std::sin(angle + time * 0.7));
+
+        const int blue = static_cast<int>(
+            205 + 50 * std::cos(angle - time * 0.5));
+
+        const int thickness = speaking ? 5 : 10;
+
+        for (int dx = 0; dx < thickness; ++dx)
+        {
+            const int shade = (dx == 0) ? 6 : 5;
+
+            drawing.DrawPoint(
+                x + dx,
+                y,
+                true,
+                Color::RGB(
+                    red / shade,
+                    green / shade,
+                    blue / shade));
+        }
+    }
+
+    auto orb =
+        canvas(std::move(drawing)) | flex | reflect(voiceBox);
+
+    auto status =
+        text(
+            speaking
+                ? "AGENTE DE VOZ · Falando"
+                : (generating
+                       ? "AGENTE DE VOZ · Preparando"
+                       : "AGENTE DE VOZ · Pronto")) |
+        bold | color(Color::Cyan);
+
+    return vbox({orb,
+                 separator(),
+                 status}) |
+           flex;
 }
 
 // ============================================================
@@ -234,38 +490,132 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
     // Renderização do histórico
     // --------------------------------------------------------
 
-    auto chatRenderer = Renderer([this]
-                                 {
-    Elements entries;
+    // Container que armazenará os componentes de cada mensagem.
+    auto messageList = Container::Vertical({});
 
-    std::lock_guard<std::mutex> lock(chat_mutex);
-
-    for (const auto& entry : messages)
+    // Renderiza uma mensagem procurando pelo ID.
+    // O mutex é adquirido somente durante a leitura.
+    // Isso evita referências inválidas e deadlocks.
+    auto renderMessage = [this](
+                             MessageId id,
+                             bool thinking,
+                             bool showRole) -> Element
     {
-        entries.push_back(
-            vbox({
-                hbox({
-                    text(entry.role + ": ")
-                        | bold
-                        | color(entry.role == "User"
-                            ? Color::Blue
-                            : Color::Red),
+        std::lock_guard<std::mutex> lock(chat_mutex);
 
-                    terminal_markdown::render(
-                        entry.markdown.document()
-                    ) | flex
-                }),
+        auto it = std::find_if(
+            messages.begin(),
+            messages.end(),
+            [id](const ChatMessage &entry)
+            {
+                return entry.id == id;
+            });
 
-                separator()
-            })
-        );
-    }
+        if (it == messages.end())
+            return text("");
 
-    return vbox(std::move(entries))
-    | focusPositionRelative(0.0f, scrollPosition)
-    | vscroll_indicator
-    | yframe
-    | flex; });
+        auto content = terminal_markdown::render(
+            it->markdown.document());
+
+        if (thinking)
+        {
+            return vbox({content | color(Color::Grey0),
+                         separator()});
+        }
+
+        // Dentro de um Collapsible, não precisamos repetir
+        // o nome da mensagem no conteúdo.
+        if (!showRole)
+        {
+            return vbox({content,
+                         separator()});
+        }
+
+        return vbox({hbox({text(it->role + ": ") | role == "User" ? color(Color::Cyan) : color(Color::Red),
+                           content | flex}),
+                     separator()});
+    };
+
+    // Constrói um componente para cada mensagem.
+    auto createMessageComponent =
+        [messageList, renderMessage, this](MessageId id)
+    {
+        std::string role;
+        std::string label;
+
+        {
+            std::lock_guard<std::mutex> lock(chat_mutex);
+
+            auto it = std::find_if(
+                messages.begin(),
+                messages.end(),
+                [id](const ChatMessage &entry)
+                {
+                    return entry.id == id;
+                });
+
+            if (it == messages.end())
+                return;
+
+            role = it->role;
+            label = it->label;
+        }
+
+        const bool isThinking = role == "Thinking";
+        const bool isTools = role == "Tools";
+
+        if (isThinking || isTools)
+        {
+            if (label.empty())
+                label = isThinking ? "Pensamento" : "Tools";
+
+            auto body = Renderer(
+                [renderMessage, id, isThinking]
+                {
+                    return renderMessage(id, isThinking, false);
+                });
+
+            messageList->Add(
+                Collapsible(label, body));
+
+            return;
+        }
+
+        messageList->Add(
+            Renderer(
+                [renderMessage, id]
+                {
+                    return renderMessage(id, false, true);
+                }));
+    };
+
+    // Adiciona à árvore os componentes pendentes.
+    // Esta função será executada pela thread da interface.
+    auto attachPendingMessages =
+        [this, createMessageComponent]()
+    {
+        std::vector<MessageId> pending;
+
+        {
+            std::lock_guard<std::mutex> lock(chat_mutex);
+
+            pending.swap(pendingUiMessages);
+        }
+
+        for (const auto id : pending)
+            createMessageComponent(id);
+    };
+
+    // Recupera mensagens que eventualmente foram adicionadas
+    // antes de a interface começar a executar.
+    attachPendingMessages();
+
+    auto chatRenderer = Renderer(
+        messageList,
+        [messageList, this]
+        {
+            return messageList->Render() | focusPositionRelative(0.0f, scrollPosition) | vscroll_indicator | yframe | flex;
+        });
 
     // --------------------------------------------------------
     // Entrada
@@ -362,12 +712,33 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
     // Layout e eventos globais
     // --------------------------------------------------------
 
-    auto layout = Container::Vertical({chatScroll,
+    int voiceSplitSize = 105;
+
+    auto voiceRenderer = Renderer([this]
+                                  { return voiceView(); });
+
+    auto voiceLayout = ResizableSplitLeft(
+        chatScroll,
+        voiceRenderer,
+        &voiceSplitSize);
+
+    auto layout = Container::Vertical({voiceLayout,
                                        input});
 
     // Permite rolar mesmo quando o input está focado.
-    auto events = CatchEvent(layout, [this](Event event)
-                             {
+    auto events = CatchEvent(
+        layout,
+        [this, attachPendingMessages](Event event)
+        {
+        
+        if (event == Event::Custom)
+        {
+            attachPendingMessages();
+        }
+
+        // ====== O MODO VOZ PRESERVA AS TECLAS DE EDIÇÃO DA ENTRADA ======
+        if (audioEnabled.load())
+            return false;
         if (event == Event::PageUp)
         {
             scrollPosition = std::max(
@@ -424,6 +795,25 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
                              {
     Elements elements;
 
+    // ====== ALTERNÂNCIA ENTRE CONVERSA E PERSPECTIVA DE VOZ ======
+    if (audioEnabled.load())
+{
+    elements.push_back(voiceLayout->Render() | flex);
+
+    if (showCommands)
+        elements.push_back(commandView());
+
+    elements.push_back(input->Render());
+    elements.push_back(ts->Render());
+    elements.push_back(statusBar->Render());
+
+    return vbox(std::move(elements))
+         | flex
+         | borderRounded
+         | color(Color::RGB(150, 210, 245))
+         | bgcolor(Color::Black);
+}
+
     // Conversa ocupa o espaço disponível.
     elements.push_back(
         init -> Render() | flex
@@ -454,5 +844,18 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
     return vbox(std::move(elements)) | flex; });
 
     screen.TrackMouse(true);
+
+    // ====== RELÓGIO VISUAL INDEPENDENTE DA INFERÊNCIA ======
+    input->TakeFocus();
+    voiceAnimation = std::jthread([this](std::stop_token stop)
+                                  {
+        while (!stop.stop_requested())
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(40));
+            if (!stop.stop_requested() && audioEnabled.load())
+                screen.PostEvent(Event::Custom);
+        } });
     screen.Loop(renderer);
+    voiceAnimation.request_stop();
+    voiceAnimation.join();
 }

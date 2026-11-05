@@ -1,7 +1,7 @@
 #include "router.h"
 
-Router::Router(InternalTools &tool)
-    : tool(tool)
+Router::Router(InternalTools &tools)
+    : tools(tools)
 {
 }
 
@@ -91,7 +91,7 @@ std::pair<bool, std::string> Router::routeDecide(const std::string &prompt)
 
 void Router::decideThink(const std::string &prompt)
 {
-    ToolResult result = tool.execute(
+    ToolResult result = tools.execute(
         ToolCaller::System,
         "decide_think",
         prompt).get();

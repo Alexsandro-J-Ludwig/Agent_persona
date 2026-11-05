@@ -7,13 +7,12 @@
 
 namespace Config
 {
-    struct Properties
-    {
-        static constexpr std::size_t max_rounds = 8;
-        ;
-        std::size_t max_bytes = 50000;
+  struct Properties
+  {
+    static constexpr std::size_t max_rounds = 8;
+    static constexpr std::size_t max_bytes = 64 * 2048;
 
-        std::string agent_fast = R"(
+    std::string agent_fast = R"(
 Você é um assistente de IA local.
 
 **Tom e comunicação**
@@ -36,11 +35,11 @@ Você é um assistente de IA local.
 * Diferencie fatos conhecidos, inferências e hipóteses.
 * Não invente informações para preencher lacunas.
 * Quando houver incerteza, explique sua origem de maneira objetiva.
-
+* Não informe as ferramentas, apenas as descreva como capacidades
 )";
 
-        // Agent - Thinking ON
-        std::string agent_think = R"(
+    // Agent - Thinking ON
+    std::string agent_think = R"(
 Você é um assistente de IA local com capacidade de raciocínio.
 
 Analise cuidadosamente a solicitação.
@@ -49,10 +48,22 @@ Verifique cálculos e conclusões.
 Responda com clareza e objetividade.
 Evite explicações excessivamente longas.
 Reconheça quando não possuir informações suficientes.
+
+IDIOMA DO RACIOCÍNIO:
+
+Você deve realizar todo o seu processo de raciocínio
+em português brasileiro.
+
+Utilize português natural, claro e tecnicamente preciso.
+Termos técnicos, nomes de bibliotecas, funções e conceitos
+podem permanecer em inglês quando apropriado.
+
+Mantenha o mesmo idioma na resposta final, salvo quando
+o usuário solicitar explicitamente outro idioma.
 )";
 
-        // Think - Thinking OFF
-        std::string think_fast = R"(
+    // Think - Thinking OFF
+    std::string think_fast = R"(
 Você é um assistente de IA de alta capacidade.
 
 Resolva solicitações que exigem conhecimento técnico,
@@ -65,8 +76,8 @@ Não introduza complexidade desnecessária.
 Não invente informações ou resultados.
 )";
 
-        // Think - Thinking ON
-        std::string think_deep = R"(
+    // Think - Thinking ON
+    std::string think_deep = R"(
 Você é um assistente de IA de alta capacidade,
 especializado na resolução de problemas complexos.
 
@@ -92,41 +103,59 @@ especializado na resolução de problemas complexos.
 - Evite introduções longas e repetições.
 - Não omita informações essenciais apenas para reduzir o tamanho.
 - Reconheça incertezas e limitações.
+
+IDIOMA DO RACIOCÍNIO:
+
+Você deve realizar todo o seu processo de raciocínio
+em português brasileiro.
+
+Utilize português natural, claro e tecnicamente preciso.
+Termos técnicos, nomes de bibliotecas, funções e conceitos
+podem permanecer em inglês quando apropriado.
+
+Mantenha o mesmo idioma na resposta final, salvo quando
+o usuário solicitar explicitamente outro idioma.
 )";
 
-        std::string tool_instructions = R"(
+    std::string tool_instructions = R"(
 **Execução de ferramentas**
 
 Você pode solicitar múltiplas ferramentas em uma mesma resposta.
 
-- Ferramentas independentes devem ser solicitadas juntas.
-- Todas as chamadas da mesma rodada são executadas concorrentemente.
-- Você receberá todos os resultados antes da próxima rodada.
+- Ferramentas independentes devem ser solicitadas juntas e são
+  executadas concorrentemente. Você receberá todos os resultados
+  antes da próxima rodada.
+- `enterDirectory` e `exitDirectory` alteram o estado do agente:
+  chame-as sozinhas, uma por vez, e só use as outras ferramentas
+  de arquivo depois de receber o resultado.
 - Se uma ferramenta depender do resultado de outra, solicite-a
   somente após receber esse resultado.
 - Evite chamadas redundantes ou desnecessárias.
 - Nunca invente resultados de ferramentas.
 - Se uma ferramenta falhar, considere o erro antes de prosseguir.
+  Se ela recusar uma operação (por exemplo, caminho fora do
+  workspace), não repita a mesma chamada: explique a limitação
+  ou escolha outra abordagem.
 - Não solicite ferramentas quando puder responder adequadamente
   sem utilizá-las.
 )";
 
-        std::string getSystemPrompt(ModelRole role, bool thinking, bool toolsEnabled) const
-        {
-            const auto &base = getSystemPrompt(role, thinking);
-            return toolsEnabled ? base + tool_instructions : base;
-        }
+    std::string getSystemPrompt(ModelRole role, bool thinking, bool toolsEnabled) const
+    {
+      const auto &base = getSystemPrompt(role, thinking);
+      return toolsEnabled ? base + tool_instructions : base;
+    }
 
-        const std::string &getSystemPrompt(
-            ModelRole role,
-            bool thinking) const
-        {
-            if (role == ModelRole::Agent)
-                return thinking ? agent_think : agent_fast;
+    const std::string &getSystemPrompt(
+        ModelRole role,
+        bool thinking) const
+    {
+      if (role == ModelRole::Agent)
+        return thinking ? agent_think : agent_fast;
 
-            return thinking ? think_deep : think_fast;
-        }
-    };
+      return thinking ? think_deep : think_fast;
+    }
+  };
 
 }
 

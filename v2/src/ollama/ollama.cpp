@@ -98,6 +98,7 @@ ChatResult Ollama::chatStream(
     const Model &model,
     const std::vector<json> &messages,
     StreamCallback callback,
+    ThinkCallback thinkCallback,
     bool thinking,
     const json &tools)
 {
@@ -112,10 +113,11 @@ ChatResult Ollama::chatStream(
     if (!tools.empty())
         body["tools"] = tools;
 
-    std::string buffer;       // bytes recebidos que ainda não formaram uma linha completa
-    std::string rawHead;      // primeiros bytes da resposta, só para diagnosticar erro HTTP
+    std::string buffer;  // bytes recebidos que ainda não formaram uma linha completa
+    std::string rawHead; // primeiros bytes da resposta, só para diagnosticar erro HTTP
     std::string responseText;
     json toolCalls = json::array();
+    std::string responseThink;
 
     constexpr std::size_t kRawHeadMax = 4096;
 
@@ -142,6 +144,14 @@ ChatResult Ollama::chatStream(
             responseText += content;
             if (callback)
                 callback(content);
+        }
+
+        const std::string think = message.value("think", "");
+        if (!think.empty())
+        {
+            responseThink += think;
+            if (thinkCallback)
+                thinkCallback(think);
         }
     };
 
@@ -194,5 +204,5 @@ ChatResult Ollama::chatStream(
     processLine(buffer);
     buffer.clear();
 
-    return {responseText, toolCalls};
+    return {responseText, toolCalls, responseThink};
 }
