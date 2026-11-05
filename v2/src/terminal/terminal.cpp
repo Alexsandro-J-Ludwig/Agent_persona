@@ -531,7 +531,10 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
                          separator()});
         }
 
-        return vbox({hbox({text(it->role + ": ") | role == "User" ? color(Color::Cyan) : color(Color::Red),
+        return vbox({hbox({text(it->role + ": ") |
+                               (it->role == "User"
+                                    ? color(Color::Cyan)
+                                    : color(Color::Red)),
                            content | flex}),
                      separator()});
     };

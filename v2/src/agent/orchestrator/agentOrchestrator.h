@@ -22,6 +22,11 @@ private:
     Speach speech;
     TaskManager taskManager{tools};
 
+    std::mutex pendingMutex;
+    std::deque<std::string> pending;
+    bool busy = false;
+    std::vector<std::string> drainPending();
+
 public:
     Orquestrador();
 
@@ -36,6 +41,11 @@ public:
 
     std::tuple<ModelRole, bool, bool, std::string> selectModel(
         const std::string &prompt);
+
+    bool submit(const std::string &msg);
+    bool hasPendingOrRelease();
+    void release();
+    void interruptSpeech();
 
     void setAudioEnabled(bool enabled);
     // ====== OBSERVADOR GENÉRICO DA FILA DE FALA ======

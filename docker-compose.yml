@@ -1,88 +1,40 @@
+version: "3.8"
+
 services:
-  # ============================================================
-  # LLAMA.CPP
-  # ============================================================
-  llama:
-    image: ghcr.io/ggml-org/llama.cpp:server-cuda
-    container_name: llama
+  searxng:
+    image: docker.io/searxng/searxng:latest
+    container_name: searxng
     restart: unless-stopped
-
-    gpus: all
-
-    environment:
-      NVIDIA_VISIBLE_DEVICES: all
-      NVIDIA_DRIVER_CAPABILITIES: compute,utility
-
+    ports:
+      - "8081:8080"
     volumes:
-      - ./models:/models:ro
-
-    command:
-      - "--model"
-      - "/models/agent.gguf"
-      - "--host"
-      - "0.0.0.0"
-      - "--port"
-      - "8080"
-      - "--ctx-size"
-      - "8192"
-      - "--n-gpu-layers"
-      - "99"
-      - "--parallel"
-      - "1"
-
-    networks:
-      - ollama_network
-
-  # ============================================================
-  # KOKORO TTS
-  # ============================================================
-  kokoro:
-    image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.9.0
-    container_name: kokoro
-    restart: unless-stopped
-
+      - ./searxng:/etc/searxng:rw
     environment:
-      API_LOG_LEVEL: "WARNING"
-      DEFAULT_VOICE: "pf_dora"
-
-    networks:
-      - ollama_network
-
-  # ============================================================
-  # SEARXNG
-  # ============================================================
-  services:
-    searxng:
-      image: searxng/searxng:latest
-      container_name: searxng
-      ports:
-        - "8080:8080"
-      volumes:
-        - ./searxng:/etc/searxng
-      environment:
-        - SEARXNG_BASE_URL=http://localhost:8080/
-      restart: unless-stopped
-
-  # ============================================================
-  # CLOUDFLARE
-  # ============================================================
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: cloudflared
-    restart: unless-stopped
-
-    command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}
-
-    networks:
-      - ollama_network
-
+      - SEARXNG_BASE_URL=http://localhost:8081/
     depends_on:
-      - llama
-      - kokoro
-      - searxng
+      redis:
+        condition: service_healthy
+    networks:
+      - ollama_network
+
+  redis:
+    image: docker.io/valkey/valkey:8-alpine
+    container_name: searxng-redis
+    restart: unless-stopped
+    command: valkey-server --save 30 1 --loglevel warning
+    volumes:
+      - redis-data:/data
+    networks:
+      - ollama_network
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
 volumes:
-  searxng_config:
+  redis-data:
 
 networks:
   ollama_network:

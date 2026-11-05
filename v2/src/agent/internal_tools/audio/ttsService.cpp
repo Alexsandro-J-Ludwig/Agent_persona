@@ -60,17 +60,19 @@ bool TTSService::openStream()
 
     std::cerr << "[TTS DEBUG] Comando: " << cmd << '\n';
 
-    piper_stream = platform::openPipeWrite(cmd);
-    return piper_stream != nullptr;
+    pipeline = platform::openPipeWrite(cmd);
+    return pipeline.stream != nullptr;
+}
+
+void TTSService::stop()
+{
+    std::lock_guard<std::mutex> lock(stream_mutex);
+    platform::stopPipe(pipeline);
 }
 
 void TTSService::closeStream()
 {
-    if (piper_stream)
-    {
-        platform::closePipe(piper_stream);
-        piper_stream = nullptr;
-    }
+    platform::closePipe(pipeline);
 }
 
 bool TTSService::speak(const std::string &text)
@@ -82,7 +84,7 @@ bool TTSService::speak(const std::string &text)
 
     std::lock_guard<std::mutex> lock(stream_mutex);
 
-    if (!piper_stream && !openStream())
+    if (!pipeline.stream && !openStream())
     {
         std::cerr << "[TTS ERRO] Stream fechado e falha ao reabrir.\n";
         return false;
@@ -97,24 +99,35 @@ bool TTSService::speak(const std::string &text)
 
     clean_text += '\n';
 
-    const std::size_t written = std::fwrite(clean_text.data(), 1, clean_text.size(), piper_stream);
+    const std::size_t written = std::fwrite(clean_text.data(), 1, clean_text.size(), pipeline.stream);
     // ====== CONFIRMA A ESCRITA E O FLUSH DO PIPE ======
-    const int flushResult = std::fflush(piper_stream);
+    const int flushResult = std::fflush(pipeline.stream);
 
     std::cerr << "[TTS DEBUG] Bytes enviados: "
               << written << "/" << clean_text.size() << '\n';
 
-    if (written != clean_text.size() || flushResult != 0 || std::ferror(piper_stream))
+    if (written != clean_text.size() ||
+        flushResult != 0 ||
+        std::ferror(pipeline.stream))
     {
         std::cerr << "[TTS AVISO] Pipe quebrou, tentando reconectar...\n";
+
         closeStream();
-        if (openStream())
-        {
-            const auto retried = std::fwrite(clean_text.data(), 1, clean_text.size(), piper_stream);
-            const int retryFlush = std::fflush(piper_stream);
-            return retried == clean_text.size() && retryFlush == 0 && !std::ferror(piper_stream);
-        }
-        return false;
+
+        if (!openStream())
+            return false;
+
+        const auto retried = std::fwrite(
+            clean_text.data(),
+            1,
+            clean_text.size(),
+            pipeline.stream);
+
+        const int retryFlush = std::fflush(pipeline.stream);
+
+        return retried == clean_text.size() &&
+               retryFlush == 0 &&
+               !std::ferror(pipeline.stream);
     }
 
     return true;

@@ -4,21 +4,36 @@
 Orquestrador::Orquestrador()
     : router(tools),
       manager(tools),
-      taskManager(tools),
-      speech([this](const std::string &phrase)
-             {
-          auto future = tools.execute(
-              ToolCaller::System,
-              "audioPlayer",
-              phrase
-          );
+      speech(
+          [this](const std::string &phrase)
+          {
+              auto future = tools.execute(
+                  ToolCaller::System,
+                  "audioPlayer",
+                  phrase);
 
-          ToolResult result = future.get();
+              ToolResult result = future.get();
 
-          if (!result.success)
-              throw std::runtime_error(result.error); })
+              if (!result.success)
+                  throw std::runtime_error(result.error);
+          },
+          [this]()
+          {
+              auto future = tools.execute(
+                  ToolCaller::System,
+                  "stopAudio",
+                  "");
+
+              ToolResult result = future.get();
+
+              if (!result.success)
+                  throw std::runtime_error(result.error);
+          }),
+      taskManager(tools)
 {
 }
+
+void Orquestrador::interruptSpeech() { speech.interrupt(); }
 
 std::tuple<ModelRole, bool, bool, std::string> Orquestrador::selectModel(
     const std::string &prompt)
@@ -28,6 +43,42 @@ std::tuple<ModelRole, bool, bool, std::string> Orquestrador::selectModel(
     setAudioEnabled(std::get<2>(result));
 
     return {std::get<0>(result), std::get<1>(result), std::get<2>(result), std::get<3>(result)};
+}
+
+bool Orquestrador::submit(const std::string &msg)
+{
+    std::lock_guard lock(pendingMutex);
+    if (busy)
+    {
+        pending.push_back(msg);
+        return false;
+    }
+    busy = true;
+    return true;
+}
+
+std::vector<std::string> Orquestrador::drainPending()
+{
+    std::lock_guard lock(pendingMutex);
+    std::vector<std::string> out(pending.begin(), pending.end());
+    pending.clear();
+    return out;
+}
+
+bool Orquestrador::hasPendingOrRelease()
+{
+    std::lock_guard lock(pendingMutex);
+    if (!pending.empty())
+        return true;
+    busy = false;
+    return false;
+}
+
+void Orquestrador::release()
+{
+    std::lock_guard lock(pendingMutex);
+    busy = false;
+    pending.clear();
 }
 
 std::string Orquestrador::run(
@@ -42,11 +93,13 @@ std::string Orquestrador::run(
     const Model &model = getModel(role);
 
     // Cria o histórico conforme o modelo selecionado.
+
     if (manager.getHistory().empty())
         manager.createHistory(role, thinking);
 
     manager.compressIfNeeded(role);
-    manager.addHistory("user", prompt);
+    if (!prompt.empty())
+        manager.addHistory("user", prompt);
 
     ChatResult response;
     nlohmann::json toolSchemas = tools.getSchema();
@@ -65,6 +118,12 @@ std::string Orquestrador::run(
         }
 
         manager.alterSystemHistory(role, thinking, toolsAllowed);
+        manager.audioIsActive(audio);
+
+        for (const auto &msg : drainPending())
+            manager.addHistory("user", msg);
+
+        speech.resume();
 
         response = ollama.chatStream(
             model,

@@ -1,9 +1,10 @@
 #include "internalTools.h"
-#include "http.h"
+#include "httplib.h"
 
 inline std::string cleanHTML(std::string html)
 {
-    // 1. Remover comentários HTML
+    // 1. Remover comentários HTMLclear
+    
     html = std::regex_replace(
         html, std::regex(R"(<!--[\s\S]*?-->)"), " ");
 

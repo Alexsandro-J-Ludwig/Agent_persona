@@ -9,7 +9,7 @@ namespace Config
 {
   struct Properties
   {
-    static constexpr std::size_t max_rounds = 8;
+    static constexpr std::size_t max_rounds = 64;
     static constexpr std::size_t max_bytes = 64 * 2048;
 
     std::string agent_fast = R"(

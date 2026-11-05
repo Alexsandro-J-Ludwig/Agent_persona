@@ -71,6 +71,7 @@ private:
     ToolResult decideThink(const std::string &arguments);
     ToolResult compressor(const std::string &arguments);
     ToolResult audioPlayer(const std::string &response);
+    ToolResult stopAudio(const std::string &arguments);
     ToolResult calculator(const std::string &arguments);
     ToolResult searchFiles(const std::string &arguments);
     ToolResult listDirectory(const std::string &arguments);
@@ -78,9 +79,10 @@ private:
     ToolResult getUrls(const std::string &arguments);
     ToolResult getHTML(const std::string &arguments);
 
-    inline static const std::array<ToolInfo, 9> TOOLS =
+    inline static const std::array<ToolInfo, 10> TOOLS =
         {{{"decide_think", ToolCaller::System, &InternalTools::decideThink},
           {"audioPlayer", ToolCaller::System, &InternalTools::audioPlayer},
+          {"stopAudio", ToolCaller::System, &InternalTools::stopAudio},
           {"compressor", ToolCaller::System, &InternalTools::compressor},
           {"calculator", ToolCaller::Model, &InternalTools::calculator},
           {"searchFiles", ToolCaller::Model, &InternalTools::searchFiles},

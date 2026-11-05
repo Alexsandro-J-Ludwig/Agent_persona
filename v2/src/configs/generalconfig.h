@@ -31,7 +31,7 @@ namespace Config
     {
         // 8888 = porta publicada no host pelo docker-compose do SearXNG
         return service == Service::Search
-                   ? "http://localhost:8888"
+                   ? "http://localhost:8081"
                    : "http://localhost:11434";
     }
 

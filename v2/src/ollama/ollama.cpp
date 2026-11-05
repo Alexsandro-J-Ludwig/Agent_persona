@@ -1,11 +1,14 @@
 #include "ollama.h"
 
+#include <algorithm>
 #include <iostream>
 #include <stdexcept>
 
 Ollama::Ollama()
     : client(Config::createHttpClient())
 {
+    client->set_read_timeout(600, 0);
+    client->set_write_timeout(60, 0);
 }
 
 Ollama::json Ollama::generate(
@@ -26,10 +29,7 @@ Ollama::json Ollama::generate(
         "application/json");
 
     if (!response)
-    {
-        throw std::runtime_error(
-            "Falha ao conectar com o Ollama");
-    }
+        throw std::runtime_error("Falha ao conectar com o Ollama");
 
     if (response->status < 200 || response->status >= 300)
     {
@@ -41,8 +41,7 @@ Ollama::json Ollama::generate(
                   << std::flush;
 
         throw std::runtime_error(
-            "Ollama retornou HTTP " +
-            std::to_string(response->status));
+            "Ollama retornou HTTP " + std::to_string(response->status));
     }
 
     return json::parse(response->body);
@@ -72,10 +71,7 @@ Ollama::json Ollama::chat(
         "application/json");
 
     if (!response)
-    {
-        throw std::runtime_error(
-            "Falha ao conectar com o Ollama");
-    }
+        throw std::runtime_error("Falha ao conectar com o Ollama");
 
     if (response->status < 200 || response->status >= 300)
     {
@@ -87,8 +83,7 @@ Ollama::json Ollama::chat(
                   << std::flush;
 
         throw std::runtime_error(
-            "Ollama retornou HTTP " +
-            std::to_string(response->status));
+            "Ollama retornou HTTP " + std::to_string(response->status));
     }
 
     return json::parse(response->body);
@@ -102,107 +97,159 @@ ChatResult Ollama::chatStream(
     bool thinking,
     const json &tools)
 {
-    json body = {
-        {"model", model.name},
-        {"messages", messages},
-        {"stream", true},
-        {"keep_alive", model.keep_alive},
-        {"think", thinking},
-        {"options", {{"num_ctx", model.num_ctx}, {"num_predict", model.num_predict}}}};
-
-    if (!tools.empty())
-        body["tools"] = tools;
-
-    std::string buffer;  // bytes recebidos que ainda não formaram uma linha completa
-    std::string rawHead; // primeiros bytes da resposta, só para diagnosticar erro HTTP
-    std::string responseText;
-    json toolCalls = json::array();
-    std::string responseThink;
-
+    constexpr int kMaxContinuations = 3;
     constexpr std::size_t kRawHeadMax = 4096;
 
-    auto processLine = [&](const std::string &line)
+    int continuations = 0;
+
+    std::string responseText;
+    std::string responseThink;
+    json toolCalls = json::array();
+    json conversation = messages;
+
+    while (true)
     {
-        if (line.empty())
-            return;
+        bool truncated = false;
+        std::string doneReason;
+        std::string currentGeneration;
+        std::string buffer;
+        std::string rawHead;
 
-        json chunk = json::parse(line, nullptr, /*allow_exceptions=*/false);
-        if (chunk.is_discarded() || !chunk.is_object() || !chunk.contains("message"))
-            return;
+        json body = {
+            {"model", model.name},
+            {"messages", conversation},
+            {"stream", true},
+            {"keep_alive", model.keep_alive},
+            {"think", thinking},
+            {"options", {{"num_ctx", model.num_ctx}, {"num_predict", model.num_predict}}}};
 
-        const auto &message = chunk.at("message");
+        if (!tools.empty())
+            body["tools"] = tools;
 
-        if (message.contains("tool_calls") && message.at("tool_calls").is_array())
+        auto processLine = [&](const std::string &line)
         {
-            for (const auto &call : message.at("tool_calls"))
-                toolCalls.push_back(call);
+            if (line.empty())
+                return;
+
+            json chunk = json::parse(line, nullptr, /*allow_exceptions=*/false);
+            if (chunk.is_discarded() || !chunk.is_object() || !chunk.contains("message"))
+                return;
+
+            if (chunk.value("done", false))
+            {
+                doneReason = chunk.value("done_reason", "");
+                truncated = (doneReason == "length");
+            }
+
+            const auto &message = chunk.at("message");
+
+            if (message.contains("tool_calls") && message.at("tool_calls").is_array())
+            {
+                for (const auto &call : message.at("tool_calls"))
+                    toolCalls.push_back(call);
+            }
+
+            const std::string content = message.value("content", "");
+            if (!content.empty())
+            {
+                responseText += content;
+                currentGeneration += content;
+                if (callback)
+                    callback(content);
+            }
+
+            const std::string think = message.value("thinking", "");
+            if (!think.empty())
+            {
+                responseThink += think;
+                if (thinkCallback)
+                    thinkCallback(think);
+            }
+        };
+
+        auto receiver = [&](const char *data, std::size_t length)
+        {
+            if (rawHead.size() < kRawHeadMax)
+                rawHead.append(data, std::min(length, kRawHeadMax - rawHead.size()));
+
+            buffer.append(data, length);
+
+            std::size_t pos;
+            while ((pos = buffer.find('\n')) != std::string::npos)
+            {
+                processLine(buffer.substr(0, pos));
+                buffer.erase(0, pos + 1);
+            }
+
+            return true;
+        };
+
+        httplib::Headers headers;
+
+        auto response = client->Post(
+            "/api/chat",
+            headers,
+            body.dump(),
+            "application/json",
+            receiver);
+
+        if (!response)
+            throw std::runtime_error("Falha ao conectar com o Ollama");
+
+        if (response->status < 200 || response->status >= 300)
+        {
+            std::cerr << "\n========== ERRO OLLAMA ==========\n"
+                      << "[Ollama] HTTP: " << response->status << '\n'
+                      << "[Ollama] BODY: " << (rawHead.empty() ? response->body : rawHead) << '\n'
+                      << "[Ollama] Origem: Ollama.cpp (chatStream)\n"
+                      << "================================\n"
+                      << std::flush;
+
+            throw std::runtime_error(
+                "Ollama retornou HTTP " + std::to_string(response->status));
         }
 
-        const std::string content = message.value("content", "");
-        if (!content.empty())
+        processLine(buffer);
+        buffer.clear();
+
+        std::cout << "[Ollama] Geração finalizada."
+                  << " Motivo: " << doneReason
+                  << " | Truncada: " << truncated
+                  << " | Caracteres: " << currentGeneration.size()
+                  << '\n';
+
+        if (!truncated)
+            break;
+
+        // Tool call cortada não pode ser continuada com texto.
+        if (!toolCalls.empty())
+            break;
+
+        if (++continuations > kMaxContinuations)
         {
-            responseText += content;
-            if (callback)
-                callback(content);
+            std::cerr << "[Ollama] Limite de continuações atingido.\n";
+            break;
         }
 
-        const std::string think = message.value("think", "");
-        if (!think.empty())
+        if (currentGeneration.empty())
         {
-            responseThink += think;
-            if (thinkCallback)
-                thinkCallback(think);
-        }
-    };
+            // O pensamento consumiu todo o num_predict: tenta sem thinking.
+            if (thinking)
+            {
+                thinking = false;
+                conversation.push_back({{"role", "user"},
+                                        {"content", "Responda diretamente, sem raciocinar."}});
+                continue;
+            }
 
-    auto receiver = [&](const char *data, std::size_t length)
-    {
-        if (rawHead.size() < kRawHeadMax)
-            rawHead.append(data, std::min(length, kRawHeadMax - rawHead.size()));
-
-        buffer.append(data, length);
-
-        std::size_t pos;
-        while ((pos = buffer.find('\n')) != std::string::npos)
-        {
-            processLine(buffer.substr(0, pos));
-            buffer.erase(0, pos + 1);
+            std::cerr << "[Ollama] Truncado sem conteúdo: aumente num_ctx/num_predict.\n";
+            break;
         }
 
-        return true;
-    };
-
-    httplib::Headers headers;
-
-    auto response = client->Post(
-        "/api/chat",
-        headers,
-        body.dump(),
-        "application/json",
-        receiver);
-
-    if (!response)
-    {
-        throw std::runtime_error(
-            "Falha ao conectar com o Ollama");
+        conversation.push_back({{"role", "assistant"}, {"content", currentGeneration}});
+        conversation.push_back({{"role", "user"},
+                                {"content", "Continue exatamente de onde parou, sem repetir o conteúdo anterior."}});
     }
-
-    if (response->status < 200 || response->status >= 300)
-    {
-        std::cerr << "\n========== ERRO OLLAMA ==========\n"
-                  << "[Ollama] HTTP: " << response->status << '\n'
-                  << "[Ollama] BODY: " << (rawHead.empty() ? response->body : rawHead) << '\n'
-                  << "[Ollama] Origem: Ollama.cpp (chatStream)\n"
-                  << "================================\n"
-                  << std::flush;
-
-        throw std::runtime_error(
-            "Ollama retornou HTTP " +
-            std::to_string(response->status));
-    }
-
-    processLine(buffer);
-    buffer.clear();
 
     return {responseText, toolCalls, responseThink};
 }

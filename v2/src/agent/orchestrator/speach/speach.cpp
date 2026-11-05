@@ -2,12 +2,15 @@
 #include <iostream>
 #include <stdexcept>
 #include <utility>
+#include "src/agent/internal_tools/audio/ttsService.h"
 
-Speach::Speach(Speaker speaker)
-    : speaker(std::move(speaker))
+Speach::Speach(Speaker speaker, Stopper stopper)
+    : speaker(std::move(speaker)),
+      stopper(std::move(stopper))
 {
     if (!this->speaker)
         throw std::invalid_argument("Speach precisa de uma função de reprodução.");
+
     worker = std::thread(&Speach::consume, this);
 }
 
@@ -25,6 +28,10 @@ Speach::~Speach()
 
 void Speach::feed(const std::string &token)
 {
+    std::lock_guard feedLock(feedMtx);
+    if (muted)
+        return;
+
     // ====== LIMPA O MARKDOWN ANTES DE TESTAR E ENFILEIRAR A FRASE ======
     pendingSpeech += audioCleaner(token);
 
@@ -52,6 +59,15 @@ void Speach::feed(const std::string &token)
 
 void Speach::flush()
 {
+    std::lock_guard feedLock(feedMtx);
+
+    if (muted)
+    {
+        pendingSpeech.clear();
+        markdownBuffer.clear();
+        return;
+    }
+
     // ====== FINALIZA A RESPOSTA SEM VAZAR ESTADO PARA A PRÓXIMA ======
     pendingSpeech += audioCleaner("", true);
     std::string text = std::move(pendingSpeech);
@@ -61,8 +77,48 @@ void Speach::flush()
     atLineStart = true;
     fenceLength = 3;
     fenceMarker = '`';
+
     if (text.find_first_not_of(" \t\r\n") != std::string::npos)
         enqueue(std::move(text));
+}
+
+void Speach::interrupt()
+{
+    {
+        std::lock_guard feedLock(feedMtx);
+        muted = true;
+        pendingSpeech.clear();
+        markdownBuffer.clear();
+        insideCodeBlock = false;
+        atLineStart = true;
+        fenceLength = 3;
+        fenceMarker = '`';
+    }
+
+    {
+        std::lock_guard lock(mtx);
+        phrases.clear();
+        ++generation; // invalida a frase que está tocando
+    }
+
+    if (stopper)
+    {
+        try
+        {
+            stopper();
+        }
+        catch (...)
+        {
+        }
+    }
+
+    idle.notify_all();
+}
+
+void Speach::resume()
+{
+    std::lock_guard feedLock(feedMtx);
+    muted = false;
 }
 
 // =================================================
@@ -94,10 +150,34 @@ void Speach::wait()
 // ===================================================
 void Speach::cancelPending()
 {
-    std::lock_guard lock(mtx);
-    phrases.clear();
-    if (!active)
-        idle.notify_all();
+    {
+        std::lock_guard feedLock(feedMtx);
+        pendingSpeech.clear();
+        markdownBuffer.clear();
+        insideCodeBlock = false;
+        atLineStart = true;
+        fenceLength = 3;
+        fenceMarker = '`';
+    }
+
+    {
+        std::lock_guard lock(mtx);
+        phrases.clear();
+        ++generation;
+    }
+
+    if (stopper)
+    {
+        try
+        {
+            stopper();
+        }
+        catch (...)
+        {
+        }
+    }
+
+    idle.notify_all();
 }
 
 // ===================================================
@@ -133,6 +213,7 @@ std::string Speach::audioCleaner(const std::string &text, bool final)
             const auto newline = markdownBuffer.find('\n', i);
             const auto end = newline == std::string::npos ? markdownBuffer.size() : newline;
             std::size_t first = i;
+
             while (first < end && (markdownBuffer[first] == ' ' || markdownBuffer[first] == '\t'))
                 ++first;
 
@@ -142,6 +223,7 @@ std::string Speach::audioCleaner(const std::string &text, bool final)
                     break;
 
                 std::size_t fenceEnd = first;
+
                 while (fenceEnd < end && markdownBuffer[fenceEnd] == fenceMarker)
                     ++fenceEnd;
 
@@ -157,13 +239,16 @@ std::string Speach::audioCleaner(const std::string &text, bool final)
             {
                 if (newline == std::string::npos && !final)
                     break;
+
                 result += '\n';
+
                 i = end + (newline != std::string::npos ? 1 : 0);
                 continue;
             }
 
             const char marker = markdownBuffer[first];
             std::size_t after = first;
+
             while (after < end && markdownBuffer[after] == marker)
                 ++after;
 
@@ -176,9 +261,11 @@ std::string Speach::audioCleaner(const std::string &text, bool final)
                 {
                     if (newline == std::string::npos && !final)
                         break;
+
                     insideCodeBlock = true;
                     fenceMarker = marker;
                     fenceLength = after - first;
+
                     i = end + (newline != std::string::npos ? 1 : 0);
                     continue;
                 }
@@ -190,6 +277,7 @@ std::string Speach::audioCleaner(const std::string &text, bool final)
             {
                 if (after == end && newline == std::string::npos && !final)
                     break;
+
                 if (after - first <= 6 && after < end &&
                     (markdownBuffer[after] == ' ' || markdownBuffer[after] == '\t'))
                     prefixEnd = after + 1;
@@ -198,19 +286,24 @@ std::string Speach::audioCleaner(const std::string &text, bool final)
             {
                 if (first + 1 == end && newline == std::string::npos && !final)
                     break;
+
                 if (first + 1 < end &&
                     (markdownBuffer[first + 1] == ' ' || markdownBuffer[first + 1] == '\t'))
                     prefixEnd = first + 2;
             }
+
             else if (marker >= '0' && marker <= '9')
             {
                 std::size_t numberEnd = first;
+
                 while (numberEnd < end && markdownBuffer[numberEnd] >= '0' && markdownBuffer[numberEnd] <= '9')
                     ++numberEnd;
+
                 if (newline == std::string::npos && !final &&
                     (numberEnd == end ||
                      (numberEnd + 1 == end && (markdownBuffer[numberEnd] == '.' || markdownBuffer[numberEnd] == ')'))))
                     break;
+
                 if (numberEnd + 1 < end &&
                     (markdownBuffer[numberEnd] == '.' || markdownBuffer[numberEnd] == ')') &&
                     (markdownBuffer[numberEnd + 1] == ' ' || markdownBuffer[numberEnd + 1] == '\t'))
@@ -255,6 +348,8 @@ void Speach::consume()
     {
         std::string phrase;
         Speaker notify;
+        unsigned long gen;
+
         {
             std::unique_lock lock(mtx);
             ready.wait(lock, [this]
@@ -264,19 +359,26 @@ void Speach::consume()
                 return;
 
             phrase = std::move(phrases.front());
-
             phrases.pop_front();
             active = true;
             notify = phraseCallback;
+            gen = generation;
         }
 
-        // A chamada demorada acontece fora do mutex e fora do streaming.
+        // A chamada demorada acontece fora do mutex.
         std::string failure;
         try
         {
             speaker(phrase);
-            // ====== NOTIFICA A FRASE APÓS O ENVIO AO TTS ======
-            if (notify)
+
+            bool stale;
+            {
+                std::lock_guard lock(mtx);
+                stale = (gen != generation);
+            }
+
+            // Só mostra a legenda se a frase não foi interrompida.
+            if (notify && !stale)
                 notify(phrase);
         }
         catch (const std::exception &exception)
@@ -290,11 +392,20 @@ void Speach::consume()
 
         {
             std::lock_guard lock(mtx);
+            const bool stale = (gen != generation);
+
+            // Erro de uma frase interrompida é esperado: ignora.
+            if (stale)
+                failure.clear();
+
             if (!failure.empty())
                 error = failure;
+
             active = false;
         }
+
         idle.notify_all();
+
         if (!failure.empty())
             std::cerr << "[Speach] " << failure << '\n';
     }

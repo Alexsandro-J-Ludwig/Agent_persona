@@ -16,6 +16,7 @@ public:
 
     void createHistory(ModelRole role, bool thinking);
     void alterSystemHistory(ModelRole role, bool thinking, bool toolsEnabled = true);
+    void audioIsActive(bool audio);
 
     void addHistory(const std::string &role,
                     const std::string &message,

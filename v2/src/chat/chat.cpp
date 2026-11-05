@@ -1,6 +1,5 @@
 #include "chat.h"
 
-#include <atomic>
 #include <exception>
 #include <optional>
 #include <string>
@@ -8,34 +7,26 @@
 
 void Chat::sendMessage(const std::string &prompt)
 {
-    if (processing.exchange(true))
+    // false = já existe uma execução; a mensagem entrou na fila.
+    if (!orquestrador.submit(prompt))
+    {
+        orquestrador.interruptSpeech(); // novo
+        terminal.addMessage("User", prompt);
         return;
+    }
 
     if (ai_thread.joinable())
         ai_thread.join();
 
-    // Mensagem do usuário.
     terminal.addMessage("User", prompt);
 
     ai_thread = std::thread([this, prompt]()
                             {
-        struct ProcessingGuard
-        {
-            std::atomic_bool& flag;
-
-            ~ProcessingGuard()
-            {
-                flag.store(false);
-            }
-        } guard{processing};
-
         bool timerStarted = false;
 
         std::optional<MessageId> current;
         std::optional<MessageId> thinkCurrent;
 
-        // Finaliza as mensagens de resposta e pensamento abertas,
-        // além do agrupador de ferramentas, caso exista.
         auto finishOpenMessages = [&]()
         {
             if (current)
@@ -43,143 +34,98 @@ void Chat::sendMessage(const std::string &prompt)
                 terminal.finishMessage(*current);
                 current.reset();
             }
-
             if (thinkCurrent)
             {
                 terminal.finishMessage(*thinkCurrent);
                 thinkCurrent.reset();
             }
-
             terminal.finishToolGroup();
+        };
+
+        auto onChunk = [&](const std::string &chunk)
+        {
+            if (!current)
+            {
+                if (chunk.find_first_not_of(" \t\r\n") == std::string::npos)
+                    return;
+
+                if (thinkCurrent)
+                {
+                    terminal.finishMessage(*thinkCurrent);
+                    thinkCurrent.reset();
+                }
+                current = terminal.addMessage("IA", "", true);
+            }
+            terminal.appendChunk(*current, chunk);
+        };
+
+        auto onThink = [&](const std::string &chunk)
+        {
+            if (!thinkCurrent)
+            {
+                if (chunk.find_first_not_of(" \t\r\n") == std::string::npos)
+                    return;
+
+                if (current)
+                {
+                    terminal.finishMessage(*current);
+                    current.reset();
+                }
+                thinkCurrent = terminal.addMessage("Thinking", "", true);
+            }
+            terminal.appendChunk(*thinkCurrent, chunk);
+        };
+
+        auto onTool = [&](const std::string &name, const ToolResult &result)
+        {
+            if (current)
+            {
+                terminal.finishMessage(*current);
+                current.reset();
+            }
+            if (thinkCurrent)
+            {
+                terminal.finishMessage(*thinkCurrent);
+                thinkCurrent.reset();
+            }
+            terminal.appendToolResult(name, result.success, result.output, result.error);
         };
 
         try
         {
-            auto [role, thinking, audio, texto] =
-                orquestrador.selectModel(prompt);
+            auto [role, thinking, audio, texto] = orquestrador.selectModel(prompt);
 
             terminal.setAudioStatus(audio);
 
             if (texto.find_first_not_of(" \t\n\r") == std::string::npos)
             {
                 terminal.setStatus("");
+                orquestrador.release();
                 return;
             }
 
             terminal.setStatus(
-                std::string(
-                    role == ModelRole::Think ? "Think" : "Agent"
-                ) +
-                (thinking ? " | Thinking ON" : " | Thinking OFF")
-            );
+                std::string(role == ModelRole::Think ? "Think" : "Agent") +
+                (thinking ? " | Thinking ON" : " | Thinking OFF"));
 
             terminal.startThinking();
             timerStarted = true;
 
-            orquestrador.run(
-                texto,
-                role,
-                thinking,
-                audio,
+            std::string next = texto;
+            do
+            {
+                orquestrador.run(next, role, thinking, audio, onChunk, onThink, onTool);
+                finishOpenMessages();
 
-                // =========================================
-                // RESPOSTA DO MODELO
-                // =========================================
-                [&](const std::string& chunk)
-                {
-                    if (!current)
-                    {
-                        if (chunk.find_first_not_of(" \t\r\n") ==
-                            std::string::npos)
-                        {
-                            return;
-                        }
-
-                        // Finaliza o pensamento anterior.
-                        if (thinkCurrent)
-                        {
-                            terminal.finishMessage(*thinkCurrent);
-                            thinkCurrent.reset();
-                        }
-
-                        current = terminal.addMessage(
-                            "IA",
-                            "",
-                            true
-                        );
-                    }
-
-                    terminal.appendChunk(*current, chunk);
-                },
-
-                // =========================================
-                // PENSAMENTO DO MODELO
-                // =========================================
-                [&](const std::string& chunk)
-                {
-                    if (!thinkCurrent)
-                    {
-                        if (chunk.find_first_not_of(" \t\r\n") ==
-                            std::string::npos)
-                        {
-                            return;
-                        }
-
-                        // Finaliza uma resposta anterior, se existir.
-                        if (current)
-                        {
-                            terminal.finishMessage(*current);
-                            current.reset();
-                        }
-
-                        thinkCurrent = terminal.addMessage(
-                            "Thinking",
-                            "",
-                            true
-                        );
-                    }
-
-                    terminal.appendChunk(*thinkCurrent, chunk);
-                },
-
-                // =========================================
-                // RESULTADO DE UMA FERRAMENTA
-                // =========================================
-                [&](const std::string& name, const ToolResult& result)
-                {
-                    // A chamada de ferramenta encerra os canais
-                    // de resposta/pensamento do round anterior.
-                    if (current)
-                    {
-                        terminal.finishMessage(*current);
-                        current.reset();
-                    }
-
-                    if (thinkCurrent)
-                    {
-                        terminal.finishMessage(*thinkCurrent);
-                        thinkCurrent.reset();
-                    }
-
-                    // O TerminalDisplay cuida de todo o agrupamento.
-                    terminal.appendToolResult(
-                        name,
-                        result.success,
-                        result.output,
-                        result.error
-                    );
-                }
-            );
-
-            // Finaliza os componentes da execução.
-            finishOpenMessages();
+                // Mensagens enviadas durante a execução entram via drainPending().
+                next.clear();
+            } while (orquestrador.hasPendingOrRelease());
 
             terminal.stopThinking();
             timerStarted = false;
-
             terminal.setStatus("");
         }
-        catch (const std::exception& e)
+        catch (const std::exception &e)
         {
             if (timerStarted)
             {
@@ -193,8 +139,7 @@ void Chat::sendMessage(const std::string &prompt)
             {
                 terminal.appendChunk(
                     *current,
-                    "\n\n**Erro na geração:** " + std::string(e.what())
-                );
+                    "\n\n**Erro na geração:** " + std::string(e.what()));
             }
 
             finishOpenMessages();
@@ -203,6 +148,7 @@ void Chat::sendMessage(const std::string &prompt)
                 terminal.addMessage("Erro", e.what());
 
             terminal.setStatus("Erro na geração");
+            orquestrador.release();
         }
         catch (...)
         {
@@ -218,27 +164,21 @@ void Chat::sendMessage(const std::string &prompt)
             {
                 terminal.appendChunk(
                     *current,
-                    "\n\n**Erro desconhecido na geração.**"
-                );
+                    "\n\n**Erro desconhecido na geração.**");
             }
 
             finishOpenMessages();
 
             if (!hasResponse)
-            {
-                terminal.addMessage(
-                    "Erro",
-                    "Ocorreu um erro desconhecido."
-                );
-            }
+                terminal.addMessage("Erro", "Ocorreu um erro desconhecido.");
 
             terminal.setStatus("Erro na geração");
+            orquestrador.release();
         } });
 }
 
 void Chat::run()
 {
-    // Conecta a notificação de fala à legenda.
     orquestrador.setSpeechCallback(
         [this](const std::string &phrase)
         {
