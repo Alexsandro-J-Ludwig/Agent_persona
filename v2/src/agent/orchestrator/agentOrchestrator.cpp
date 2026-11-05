@@ -98,6 +98,7 @@ std::string Orquestrador::run(
         manager.createHistory(role, thinking);
 
     manager.compressIfNeeded(role);
+    manager.stripOldThinking();
     if (!prompt.empty())
         manager.addHistory("user", prompt);
 
@@ -112,7 +113,7 @@ std::string Orquestrador::run(
         if (round == Config::Properties::max_rounds)
         {
             manager.addHistory(
-                "System",
+                "system",
                 "Limite de rounds atingido. Você não poderá chamar "
                 "novas ferramentas nesta requisição.");
         }
@@ -125,52 +126,72 @@ std::string Orquestrador::run(
 
         speech.resume();
 
+        auto onModelChunk = [&](const std::string &chunk)
+        {
+            if (onChunk)
+                onChunk(chunk);
+            if (audio)
+                speech.feed(chunk);
+        };
+
+        auto onModelThink = [&](const std::string &chunk)
+        {
+            if (thinkChunk)
+                thinkChunk(chunk);
+        };
+
+        const nlohmann::json activeTools =
+            toolsAllowed ? toolSchemas : nlohmann::json::array();
+
         response = ollama.chatStream(
-            model,
-            manager.getHistory(),
-
-            // Resposta do modelo.
-            [&](const std::string &chunk)
-            {
-                if (onChunk)
-                    onChunk(chunk);
-
-                if (audio)
-                    speech.feed(chunk);
-            },
-
-            // Pensamento do modelo.
-            [&](const std::string &chunk)
-            {
-                if (thinkChunk)
-                    thinkChunk(chunk);
-            },
-
-            thinking,
-            toolsAllowed
-                ? toolSchemas
-                : nlohmann::json::array());
+            model, manager.getHistory(),
+            onModelChunk, onModelThink,
+            thinking, activeTools);
 
         if (audio)
             speech.flush();
 
+        // Rodada inválida: vazia ou com tool call vazada como texto.
+        const bool leaked =
+            response.think.find("<rfl:parameter") != std::string::npos ||
+            response.response.find("<rfl:parameter") != std::string::npos;
+
+        if (response.toolCalls.empty() && (response.response.empty() || leaked))
+        {
+            std::cerr << "[RUN] rodada invalida, repetindo sem thinking\n";
+
+            response = ollama.chatStream(
+                model, manager.getHistory(),
+                onModelChunk, onModelThink,
+                false, activeTools);
+
+            if (audio)
+                speech.flush();
+        }
+
         manager.addHistory(
             "assistant",
             response.response,
-            response.toolCalls);
+            response.toolCalls,
+            "",
+            response.think);
 
-        // Não existem mais ferramentas para executar.
         if (response.toolCalls.empty() || !toolsAllowed)
             break;
 
-        // Executa as ferramentas e apenas notifica o observador.
         taskManager.toolCalling(
             response.toolCalls,
-
-            [onTool](const std::string &name, const ToolResult &result)
+            [&](const std::string &name, const ToolResult &r)
             {
+                manager.addHistory(
+                    "tool",
+                    r.success ? r.output
+                              : "Falha ao executar a ferramenta: " + r.error,
+                    Ollama::json::array(),
+                    name);
+
                 if (onTool)
-                    onTool(name, result);
+                    onTool(name, r);
             });
     }
 

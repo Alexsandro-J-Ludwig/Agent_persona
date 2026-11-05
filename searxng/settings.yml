@@ -1,13 +1,32 @@
-# Read the documentation before extending the defaults:
-# https://docs.searxng.org/admin/settings/
-
 use_default_settings: true
 
 server:
   secret_key: "M1h9gqBQuQmMtvpEIBl3hOyBnuQ0YMJ1"
   image_proxy: true
+  limiter: false
 
 search:
   formats:
     - html
     - json
+
+engines:
+  - name: duckduckgo
+    disabled: true
+  - name: google cse
+    disabled: true
+  - name: brave
+    disabled: true
+  - name: wikidata
+    disabled: true
+  - name: mojeek
+    disabled: false
+  - name: startpage
+    disabled: false
+  - name: bing
+    disabled: false
+  - name: wikipedia
+    disabled: false
+
+
+    

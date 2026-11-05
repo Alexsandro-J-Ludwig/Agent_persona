@@ -575,7 +575,12 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
             auto body = Renderer(
                 [renderMessage, id, isThinking]
                 {
-                    return renderMessage(id, isThinking, false);
+                    Element e = renderMessage(id, isThinking, false);
+
+                    if (isThinking)
+                        e = e | color(Color::RGB(170, 170, 190)) | nothing;
+
+                    return e;
                 });
 
             messageList->Add(

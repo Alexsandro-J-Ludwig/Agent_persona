@@ -61,23 +61,34 @@ void HistoryManager::addHistory(
     const std::string &role,
     const std::string &message,
     const Ollama::json &tool_calls,
-    const std::string &tool_name)
+    const std::string &tool_name,
+    const std::string &think)
 {
-
     Ollama::json msg = {{"role", role}, {"content", message}};
+
     if (!tool_calls.empty())
         msg["tool_calls"] = tool_calls;
-
     if (!tool_name.empty())
         msg["tool_name"] = tool_name;
+    if (!think.empty())
+        msg["thinking"] = think;
+    // Não reenvia o pensamento ao modelo; só registra no log.
 
     history.push_back(std::move(msg));
 
-    std::cerr << "\n========== LOG HISTORICO ==========\n"
-              << "[History] Role: " << role << '\n'
-              << "[History] Content: " << message << '\n'
-              << "===================================\n"
-              << std::flush;
+    std::cerr << "[HIST] role=" << role
+              << " content_len=" << message.size()
+              << " tool_calls=" << tool_calls.size()
+              << " think_len=" << think.size()
+              << " tool_name=" << tool_name << '\n';
+    if (!think.empty())
+        std::cerr << "[HIST_THINK] " << think.substr(0, 500) << '\n';
+}
+
+void HistoryManager::stripOldThinking()
+{
+    for (auto &m : history)
+        m.erase("thinking");
 }
 
 void HistoryManager::compressIfNeeded(ModelRole role)
@@ -99,9 +110,10 @@ void HistoryManager::compressor()
         history.end());
 
     auto summary = tools.execute(
-        ToolCaller::System,
-        "compressor",
-        Ollama::json(messages).dump()).get();
+                            ToolCaller::System,
+                            "compressor",
+                            Ollama::json(messages).dump())
+                       .get();
 
     if (!summary.success)
         throw std::runtime_error("Falha ao comprimir histórico: " + summary.error);

@@ -7,10 +7,9 @@
 
 void Chat::sendMessage(const std::string &prompt)
 {
-    // false = já existe uma execução; a mensagem entrou na fila.
+    orquestrador.interruptSpeech();
     if (!orquestrador.submit(prompt))
     {
-        orquestrador.interruptSpeech(); // novo
         terminal.addMessage("User", prompt);
         return;
     }

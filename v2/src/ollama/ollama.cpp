@@ -165,6 +165,11 @@ ChatResult Ollama::chatStream(
                 if (thinkCallback)
                     thinkCallback(think);
             }
+
+            std::cerr << "[PARSED] content=[" << content << "] think=[" << think
+                      << "] tool_calls="
+                      << (message.contains("tool_calls") ? message.at("tool_calls").size() : 0)
+                      << '\n';
         };
 
         auto receiver = [&](const char *data, std::size_t length)
@@ -186,10 +191,19 @@ ChatResult Ollama::chatStream(
 
         httplib::Headers headers;
 
+        const std::string payload =
+            body.dump(-1, ' ', false, json::error_handler_t::replace);
+
+        std::cerr << "[REQ] model=" << model.name
+                  << " bytes=" << payload.size()
+                  << " msgs=" << conversation.size()
+                  << " tools=" << tools.size()
+                  << " think=" << thinking << '\n';
+
         auto response = client->Post(
             "/api/chat",
             headers,
-            body.dump(),
+            payload,
             "application/json",
             receiver);
 

@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include <cstdio>
@@ -15,6 +14,10 @@
 #include <fcntl.h>
 #else
 #include <sys/types.h>
+#include <sys/wait.h>
+#include <csignal>
+#include <fcntl.h>
+#include <unistd.h>
 #endif
 
 namespace platform
@@ -28,6 +31,8 @@ namespace platform
 #ifdef _WIN32
                 HANDLE process = nullptr;
                 HANDLE job = nullptr;
+#else
+                pid_t pid = -1;
 #endif
         };
 
@@ -90,22 +95,12 @@ namespace platform
                 HANDLE readPipe = nullptr;
                 HANDLE writePipe = nullptr;
 
-                if (!CreatePipe(
-                        &readPipe,
-                        &writePipe,
-                        &security,
-                        0))
-                {
+                if (!CreatePipe(&readPipe, &writePipe, &security, 0))
                         return pipe;
-                }
 
-                SetHandleInformation(
-                    writePipe,
-                    HANDLE_FLAG_INHERIT,
-                    0);
+                SetHandleInformation(writePipe, HANDLE_FLAG_INHERIT, 0);
 
                 wchar_t systemDirectory[MAX_PATH];
-
                 GetSystemDirectoryW(systemDirectory, MAX_PATH);
 
                 std::wstring cmdPath =
@@ -146,7 +141,6 @@ namespace platform
                 }
 
                 JOBOBJECT_EXTENDED_LIMIT_INFORMATION jobInfo{};
-
                 jobInfo.BasicLimitInformation.LimitFlags =
                     JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
 
@@ -186,9 +180,7 @@ namespace platform
 
                 pipe.process = processInfo.hProcess;
 
-                if (!AssignProcessToJobObject(
-                        pipe.job,
-                        processInfo.hProcess))
+                if (!AssignProcessToJobObject(pipe.job, processInfo.hProcess))
                 {
                         TerminateProcess(processInfo.hProcess, 1);
                         WaitForSingleObject(processInfo.hProcess, INFINITE);
@@ -235,7 +227,51 @@ namespace platform
 
 #else
 
-                pipe.stream = popen(cmd.c_str(), "w");
+                int fds[2];
+                if (::pipe(fds) != 0)
+                        return pipe;
+
+                const pid_t pid = fork();
+                if (pid < 0)
+                {
+                        close(fds[0]);
+                        close(fds[1]);
+                        return pipe;
+                }
+
+                if (pid == 0)
+                {
+                        setpgid(0, 0); // grupo próprio: mata sh + piper + aplay juntos
+                        dup2(fds[0], STDIN_FILENO);
+                        close(fds[0]);
+                        close(fds[1]);
+
+                        const int devnull = open("/dev/null", O_WRONLY);
+                        if (devnull >= 0)
+                        {
+                                dup2(devnull, STDOUT_FILENO);
+                                dup2(devnull, STDERR_FILENO); // silencia o log do Piper
+                                close(devnull);
+                        }
+
+                        execl("/bin/sh", "sh", "-c", cmd.c_str(), static_cast<char *>(nullptr));
+                        _exit(127);
+                }
+
+                setpgid(pid, pid);
+                close(fds[0]);
+                fcntl(fds[1], F_SETFD, FD_CLOEXEC);
+
+                pipe.stream = fdopen(fds[1], "w");
+                pipe.pid = pid;
+
+                if (!pipe.stream)
+                {
+                        close(fds[1]);
+                        kill(-pid, SIGKILL);
+                        waitpid(pid, nullptr, 0);
+                        pipe.pid = -1;
+                }
 
 #endif
 
@@ -254,9 +290,7 @@ namespace platform
                 }
 
                 if (pipe.process)
-                {
                         WaitForSingleObject(pipe.process, INFINITE);
-                }
 
                 releasePipe(pipe);
 
@@ -264,8 +298,14 @@ namespace platform
 
                 if (pipe.stream)
                 {
-                        pclose(pipe.stream);
+                        std::fclose(pipe.stream);
                         pipe.stream = nullptr;
+                }
+
+                if (pipe.pid > 0)
+                {
+                        waitpid(pipe.pid, nullptr, 0); // encerramento normal: termina de tocar
+                        pipe.pid = -1;
                 }
 
 #endif
@@ -277,20 +317,29 @@ namespace platform
 
                 // Encerra todos os processos pertencentes ao Job.
                 if (pipe.job)
-                {
                         TerminateJobObject(pipe.job, 1);
-                }
 
                 if (pipe.process)
-                {
                         WaitForSingleObject(pipe.process, INFINITE);
-                }
 
                 releasePipe(pipe);
 
 #else
 
-                closePipe(pipe);
+                if (pipe.pid > 0)
+                        kill(-pipe.pid, SIGKILL); // mata o grupo todo, o som corta na hora
+
+                if (pipe.stream)
+                {
+                        std::fclose(pipe.stream);
+                        pipe.stream = nullptr;
+                }
+
+                if (pipe.pid > 0)
+                {
+                        waitpid(pipe.pid, nullptr, 0);
+                        pipe.pid = -1;
+                }
 
 #endif
         }

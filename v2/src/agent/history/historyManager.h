@@ -17,11 +17,14 @@ public:
     void createHistory(ModelRole role, bool thinking);
     void alterSystemHistory(ModelRole role, bool thinking, bool toolsEnabled = true);
     void audioIsActive(bool audio);
+    void stripOldThinking();
 
     void addHistory(const std::string &role,
                     const std::string &message,
                     const Ollama::json &tool_calls = Ollama::json::array(),
-                    const std::string &tool_name = "");
+                    const std::string &tool_name = "",
+                    const std::string &think = ""
+                );
 
     void compressIfNeeded(ModelRole role);
 

@@ -149,8 +149,6 @@ add_executable(agent
     src/agent/internal_tools/impl/getHTML.cpp
     src/agent/internal_tools/impl/stopAudio.cpp
 
-
-
     # Internal Tools audio
     src/agent/internal_tools/audio/ttsService.cpp
 
