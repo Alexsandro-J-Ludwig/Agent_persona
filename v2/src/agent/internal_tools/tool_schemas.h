@@ -47,11 +47,20 @@ namespace ToolSchemas
     {
         return makeTool(
             "searchFiles",
-            "Searches accessible file and folder names across the system, case-insensitively. "
-            "Windows: available drives, up to 100 results; directory reparse points are not followed. "
-            "Linux: starts at /, skips /proc, /sys, /dev and /run, up to 10 results. "
-            "Args: termo (string, min 3 characters).",
-            json::object({{"termo", prop("string", "Part of the file name to look for (min 3 characters).")}}),
+            "Searches file and directory names across the accessible filesystem, "
+            "NOT just the workspace. "
+            "The search scope depends on the operating system where the agent "
+            "is actually running. "
+            "Windows: searches available logical drives. "
+            "Linux: starts at filesystem root (/), excluding system directories "
+            "/proc, /sys, /dev and /run. "
+            "The tool searches names only, not file contents. "
+            "Results may be limited by execution time, permissions and maximum "
+            "result count. "
+            "Never claim that a file or directory is inaccessible without "
+            "attempting to use the available tools. "
+            "Args: termo (string, minimum 3 characters).",
+            json::object({{"termo", prop("string", "Part of the file or directory name to search for.")}}),
             json::array({"termo"}));
     }
 
@@ -120,8 +129,18 @@ namespace ToolSchemas
     {
         return makeTool(
             "makeDir",
-            "Create a directory inside the workspace. Path is relative to the workspace root.",
-            json::object({{"path", prop("string", "Relative path of the directory to create, e.g. 'notes/2026'")}}),
+            "Creates a new directory inside the workspace. "
+            "USE THIS TOOL whenever you need to create a folder or organize "
+            "files within the workspace. "
+            "The path must be relative to the workspace root. "
+            "You can create nested directories, such as 'src/modules/utils'. "
+            "Parent directories are created automatically when necessary. "
+            "Do not use absolute paths or paths outside the workspace. "
+            "Do not assume a directory already exists; use listDirectory to "
+            "verify when necessary. "
+            "Args: path (string, required).",
+            json::object({{"path", prop("string",
+                                        "Relative directory path inside the workspace, e.g. 'src/modules/utils'.")}}),
             json::array({"path"}));
     }
 
@@ -129,10 +148,25 @@ namespace ToolSchemas
     {
         return makeTool(
             "writeFile",
-            "Create a file (now, only markdown) inside the workspace. Fails if the file already exists.",
-            json::object({{"fileName", prop("string", "Relative file name WITHOUT extension, e.g. 'notes/todo'")},
-                          {"extension", prop("string", "File extension. Only '.md' is allowed")},
-                          {"content", prop("string", "Full text content of the file (max 200000 bytes)")}}),
+            "Creates a new Markdown file inside the workspace. "
+            "USE THIS TOOL whenever you need to save generated text, "
+            "documentation, notes, plans, reports or other Markdown content. "
+            "The file is created directly inside the workspace or in a "
+            "relative subdirectory. "
+            "The parent directory must exist; use makeDir first when necessary. "
+            "The file must not already exist. This tool never overwrites "
+            "existing files. "
+            "Provide the complete file content in the content argument. "
+            "Do not include the .md extension in fileName. "
+            "Only the '.md' extension is currently supported. "
+            "Maximum content size: 200000 bytes. "
+            "Args: fileName (string), extension (string), content (string).",
+            json::object({{"fileName", prop("string",
+                                            "Relative file path WITHOUT extension, e.g. 'docs/installation'.")},
+                          {"extension", prop("string",
+                                             "File extension. Currently only '.md' is supported.")},
+                          {"content", prop("string",
+                                           "Complete Markdown content to write into the file. Maximum 200000 bytes.")}}),
             json::array({"fileName", "extension", "content"}));
     }
 

@@ -8,17 +8,23 @@ ToolResult InternalTools::writeFile(const std::string &arguments)
     {
         const auto args = json::parse(arguments);
         const auto content = args.at("content").get<std::string>();
-        const auto extension = args.at("extension").get<std::string>();
+        auto extension = args.at("extension").get<std::string>();
         const auto fileName = args.at("fileName").get<std::string>();
 
         if (content.size() > 200000)
             return {false, "", "Conteúdo muito grande"};
 
-        if (extension != ".md")
-            return {false, "", "Por segurança, só é permitido criar arquivos '.md'"};
+        if (!extension.empty() && extension[0] == '.')
+            extension.erase(0, 1);
+        std::transform(extension.begin(), extension.end(), extension.begin(),
+                       [](unsigned char c)
+                       { return std::tolower(c); });
+
+        if (extension != "md")
+            return {false, "", "Por segurança, só é permitido criar arquivos '.md' no momento"};
 
         const fs::path workspace = fs::weakly_canonical(Definitions::ensure_workspace());
-        const fs::path target = fs::weakly_canonical(workspace / (fileName + extension));
+        const fs::path target = fs::weakly_canonical(workspace / (fileName + "." + extension));
 
         const auto rel = target.lexically_relative(workspace);
         if (rel.empty() || *rel.begin() == "..")

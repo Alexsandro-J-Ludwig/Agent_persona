@@ -15,10 +15,14 @@ void HistoryManager::createHistory(
 void HistoryManager::alterSystemHistory(
     ModelRole role, bool thinking, bool toolsEnabled)
 {
-    const std::string systemPrompt =
-        properties.getSystemPrompt(role, thinking, toolsEnabled);
+    if (history.empty())
+        return;
 
-    history[0]["content"] = systemPrompt;
+    const auto hoje = std::chrono::floor<std::chrono::days>(std::chrono::system_clock::now());
+
+    history[0]["content"] =
+        properties.getSystemPrompt(role, thinking, toolsEnabled) +
+        std::format("\n[DATA HOJE] {:%Y-%m-%d}", hoje);
 }
 
 void HistoryManager::audioIsActive(bool audio)

@@ -6,8 +6,10 @@
 #include "src/agent/internal_tools/internalTools.h"
 #include <vector>
 #include <string>
+#include <format>
+#include <chrono>
 
-//class InternalTools;
+// class InternalTools;
 
 class HistoryManager
 {
@@ -23,8 +25,7 @@ public:
                     const std::string &message,
                     const Ollama::json &tool_calls = Ollama::json::array(),
                     const std::string &tool_name = "",
-                    const std::string &think = ""
-                );
+                    const std::string &think = "");
 
     void compressIfNeeded(ModelRole role);
 

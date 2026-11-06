@@ -1,10 +1,30 @@
 #include "internalTools.h"
 #include "httplib.h"
 
+struct ParsedUrl
+{
+    std::string origin, path;
+};
+
+static ParsedUrl splitUrl(const std::string &url)
+{
+    const auto schemeEnd = url.find("://");
+    const auto hostStart = schemeEnd == std::string::npos ? 0 : schemeEnd + 3;
+    const auto pathStart = url.find('/', hostStart);
+    if (pathStart == std::string::npos)
+        return {url, "/"};
+    return {url.substr(0, pathStart), url.substr(pathStart)};
+}
+
 inline std::string cleanHTML(std::string html)
 {
     // 1. Remover comentários HTMLclear
-    
+
+    std::smatch m;
+    if (std::regex_search(html, m,
+                          std::regex(R"(<(main|article)\b[^>]*>([\s\S]*?)</\1\s*>)", std::regex::icase)))
+        html = m[2].str();
+
     html = std::regex_replace(
         html, std::regex(R"(<!--[\s\S]*?-->)"), " ");
 
@@ -60,35 +80,42 @@ ToolResult InternalTools::getHTML(const std::string &arguments)
     try
     {
         const auto args = json::parse(arguments);
-        std::string url =
-            args.at("url").get<std::string>();
+        const std::string url = args.at("url").get<std::string>();
+        const auto [origin, path] = splitUrl(url);
 
-        httplib::Client cli(url);
-
+        httplib::Client cli(origin);
         cli.set_connection_timeout(5);
+        cli.set_read_timeout(10);
+        cli.set_follow_location(true);
+        cli.set_default_headers({{"User-Agent", "Mozilla/5.0"}});
 
-        std::string html;
+        auto res = cli.Get(path);
+        if (!res)
+            return {false, "", "Falha na conexão: " + httplib::to_string(res.error())};
+        if (res->status != 200)
+            return {false, "", "HTTP " + std::to_string(res->status)};
 
-        if (auto res = cli.Get("/"))
-        {
-            if (res->status == 200)
-            {
-                html = res->body;
-            }
-        }
+        std::string html = res->body;
+        if (html.size() > 500000)
+            html.resize(500000);
 
         html = cleanHTML(html);
 
-        return {
-            true,
-            url + ":" + html,
-            ""};
+        constexpr std::size_t maxOut = 12000;
+        bool truncated = false;
+        if (html.size() > maxOut)
+        {
+            std::size_t n = maxOut;
+            while (n > 0 && (static_cast<unsigned char>(html[n]) & 0xC0) == 0x80)
+                --n;
+            html.resize(n);
+            truncated = true;
+        }
+
+        return {true, url + ": " + html + (truncated ? "\n[truncado]" : ""), ""};
     }
     catch (const std::exception &e)
     {
-        return {
-            false,
-            "",
-            e.what()};
+        return {false, "", e.what()};
     }
 }
