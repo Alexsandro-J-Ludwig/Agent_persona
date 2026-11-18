@@ -48,6 +48,7 @@ public:
     void interruptSpeech();
 
     void setAudioEnabled(bool enabled);
+    void setToolEnabled(const std::string &name, bool enabled);
     // ====== OBSERVADOR GENÉRICO DA FILA DE FALA ======
     void setSpeechCallback(Speach::Speaker callback);
 };

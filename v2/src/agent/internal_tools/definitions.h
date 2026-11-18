@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <stdexcept>
 #include <string>
+#include <set>
 
 namespace fs = std::filesystem;
 
@@ -38,6 +39,15 @@ namespace Definitions
         fs::create_directories(path); // não dá erro se já existir
         return path;
     }
+
+    inline static const std::set<std::string> allowedExt = {
+        // Extenções de código
+        ".py", ".cpp", ".hpp", ".h", ".java", ".rs", ".c", ".cs",
+
+        // Texto e dados
+        ".txt", ".md", ".csv", ".json", ".xml", ".yaml", ".yml", ".toml", ".ini", ".log"
+
+    };
 }
 
 #endif

@@ -86,15 +86,34 @@ std::pair<bool, std::string> Router::routeDecide(const std::string &prompt)
             return {false, ""};
     }
 
+    auto toggleTool = [&](const std::string &cmd, bool enable) -> bool
+    {
+        if (prompt.rfind(cmd, 0) != 0)
+            return false;
+
+        std::string name = prompt.substr(cmd.size());
+        name.erase(0, name.find_first_not_of(" \t\r\n"));
+        name.erase(name.find_last_not_of(" \t\r\n") + 1);
+
+        if (!name.empty())
+            tools.setToolEnabled(name, enable);
+
+        return true;
+    };
+
+    if (toggleTool("/disable ", false) || toggleTool("/enable ", true))
+        return {false, ""};
+
     return {false, texto};
 }
 
 void Router::decideThink(const std::string &prompt)
 {
     ToolResult result = tools.execute(
-        ToolCaller::System,
-        "decide_think",
-        prompt).get();
+                                 ToolCaller::System,
+                                 "decide_think",
+                                 prompt)
+                            .get();
 
     if (!result.success)
         return; // Preserva a decisão heurística.

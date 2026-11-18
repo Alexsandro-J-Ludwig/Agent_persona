@@ -24,7 +24,7 @@ ToolResult InternalTools::makeDir(const std::string &arguments)
 
         fs::create_directories(target);
 
-        return {true, "Diretório criado: " + rel.string()};
+        return {true, "Diretório criado: " + target.string() + " (workspace: " + rel.string() + ")"};
     }
     catch (const json::exception &e)
     {

@@ -2,68 +2,74 @@
 #define MEMORY_H
 
 #include <sqlite3.h>
-#include <string>
 #include <cstdint>
-#include <mutex
+#include <mutex>
+#include <string>
+
+class InternalTools; // forward declaration, sem include
 
 struct FactResult
 {
-    int32_t factID;
-    bool success;
+    int32_t factID = 0;
+    bool success = false;
     std::string output;
     std::string error;
 };
 
 struct MemoryResult
 {
-    int32_t chatID;
-    bool success;
+    int32_t chatID = 0;
+    bool success = false;
     std::string output;
     std::string error;
 };
 
 class Memory
 {
-private:
-    Memory() = default;
-    sqlite3 *db = nullptr;
-    std::mutex mtx;
-
-    bool chatExists(int32_t chatID);
-
 public:
+    static Memory &instance()
+    {
+        static Memory m;
+        return m;
+    }
+
     Memory(const Memory &) = delete;
     Memory &operator=(const Memory &) = delete;
     ~Memory();
 
-    static Memory &memory()
-    {
-        static Memory instance;
-        return instance;
-    }
+    bool initialize(InternalTools &t);
+    void close();
 
-    bool inicialize();
+    // ===== Facts =====
+    FactResult rememberFact(const std::string &fact);
+    FactResult forgetFact(int32_t factID);
+    FactResult searchFact(const std::string &query);
+    FactResult listFact(int32_t limit);
 
-    int32_t createChat();
-
-    // ===== Fact Managment =====
-    FactResult rememberFact(const std::string &fact); // Não implementado
-    FactResult forgetFact(const int32_t factID);      // Não implementado
-    FactResult searchFact(const std::string &fact);   // Não implementado
-    FactResult listFact(const int32_t limit);         // Não implementado
-
-    // ===== Memory managment =====
+    // ===== Chats =====
     MemoryResult newChat();
     MemoryResult chatHistory(
-        const int32_t chatID = 0,
-        const std::string &role,
-        const std::string &message);                                     // Não implementado
-    MemoryResult loadChat(const int32_t chatID, const int32_t limit);    // Não implementado
-    MemoryResult listChats();                                            // Não implementado
-    MemoryResult deleteChat(const int32_t chatID);                       // Não implementado
-    MemoryResult saveSummary(const int32_t chatID, std::string summary); // Não implementado
+        int32_t chatID = 0,
+        const std::string &role = "",
+        const std::string &message = "");
+    MemoryResult loadChat(int32_t chatID, int32_t limit);
+    MemoryResult listChats();
+    MemoryResult deleteChat(int32_t chatID);
+    MemoryResult saveSummary(int32_t chatID, const std::string &summary);
+    MemoryResult setChatTitle(int32_t chatID, const std::string &title);
 
-    void close(); // Não implementado
+    // Gera o título via InternalTools e grava; nunca falha (usa fallback)
+    MemoryResult generateChatTitle(int32_t chatID, const std::string &firstMessage);
+
+private:
+    Memory() = default;
+    int32_t insertChat();
+
+    InternalTools *tools = nullptr;
+    sqlite3 *db = nullptr;
+    std::mutex mtx;
+
+    bool chatExists(int32_t chatID);
 };
 
 #endif

@@ -103,7 +103,6 @@ std::string Orquestrador::run(
         manager.addHistory("user", prompt);
 
     ChatResult response;
-    nlohmann::json toolSchemas = tools.getSchema();
 
     for (int round = 0;; round++)
     {
@@ -141,7 +140,7 @@ std::string Orquestrador::run(
         };
 
         const nlohmann::json activeTools =
-            toolsAllowed ? toolSchemas : nlohmann::json::array();
+            toolsAllowed ? tools.getSchema() : nlohmann::json::array();
 
         response = ollama.chatStream(
             model, manager.getHistory(),
@@ -211,4 +210,9 @@ void Orquestrador::setAudioEnabled(bool enabled)
 void Orquestrador::setSpeechCallback(Speach::Speaker callback)
 {
     speech.setPhraseCallback(std::move(callback));
+}
+
+void Orquestrador::setToolEnabled(const std::string &name, bool enabled)
+{
+    tools.setToolEnabled(name, enabled);
 }

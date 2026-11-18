@@ -8,6 +8,7 @@
 void Chat::sendMessage(const std::string &prompt)
 {
     orquestrador.interruptSpeech();
+
     if (!orquestrador.submit(prompt))
     {
         terminal.addMessage("User", prompt);
@@ -94,6 +95,14 @@ void Chat::sendMessage(const std::string &prompt)
         {
             auto [role, thinking, audio, texto] = orquestrador.selectModel(prompt);
 
+            bool isNewChat = (chatID == 0);
+
+            auto result = memory.chatHistory(chatID, "User", texto);
+            if (!result.success)
+                throw std::runtime_error(result.error);
+
+            chatID = result.chatID;
+
             terminal.setAudioStatus(audio);
 
             if (texto.find_first_not_of(" \t\n\r") == std::string::npos)
@@ -111,14 +120,20 @@ void Chat::sendMessage(const std::string &prompt)
             timerStarted = true;
 
             std::string next = texto;
+            std::string response;
             do
             {
-                orquestrador.run(next, role, thinking, audio, onChunk, onThink, onTool);
+                response = orquestrador.run(next, role, thinking, audio, onChunk, onThink, onTool);
                 finishOpenMessages();
 
                 // Mensagens enviadas durante a execução entram via drainPending().
                 next.clear();
             } while (orquestrador.hasPendingOrRelease());
+
+            memory.chatHistory(chatID, "Assistent", response);
+
+            if (isNewChat)
+                memory.generateChatTitle(chatID, texto);
 
             terminal.stopThinking();
             timerStarted = false;

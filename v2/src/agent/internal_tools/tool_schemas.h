@@ -4,10 +4,18 @@
 #include <json.hpp>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace ToolSchemas
 {
     using json = nlohmann::json;
+
+    struct ToolGroup
+    {
+        std::string name;
+        std::string description;
+        json tools;
+    };
 
     inline json makeTool(const std::string &name,
                          const std::string &description,
@@ -149,8 +157,8 @@ namespace ToolSchemas
         return makeTool(
             "writeFile",
             "Creates a new Markdown file inside the workspace. "
-            "USE THIS TOOL whenever you need to save generated text, "
-            "documentation, notes, plans, reports or other Markdown content. "
+            "USE THIS TOOL whenever you need to save generated code or text, "
+            "documentation, notes, plans, codes, reports or other Markdown content. "
             "The file is created directly inside the workspace or in a "
             "relative subdirectory. "
             "The parent directory must exist; use makeDir first when necessary. "
@@ -158,29 +166,140 @@ namespace ToolSchemas
             "existing files. "
             "Provide the complete file content in the content argument. "
             "Do not include the .md extension in fileName. "
-            "Only the '.md' extension is currently supported. "
             "Maximum content size: 200000 bytes. "
             "Args: fileName (string), extension (string), content (string).",
             json::object({{"fileName", prop("string",
                                             "Relative file path WITHOUT extension, e.g. 'docs/installation'.")},
                           {"extension", prop("string",
-                                             "File extension. Currently only '.md' is supported.")},
+                                             "File extension. Code or document, not support XLMS or XLS.")},
                           {"content", prop("string",
-                                           "Complete Markdown content to write into the file. Maximum 200000 bytes.")}}),
+                                           "Complete code or document content to write into the file. Maximum 200000 bytes.")}}),
             json::array({"fileName", "extension", "content"}));
     }
 
+    inline json checkSyntax()
+    {
+        return makeTool(
+            "checkSyntax",
+            "Checks the syntax of a source file inside the workspace WITHOUT running it, "
+            "using the real compiler/interpreter. Supported: .py, .c, .cpp, .rs. "
+            "Returns the compiler diagnostics. ALWAYS use this after writing code with "
+            "writeFile and fix every reported error before telling the user the code is ready. "
+            "Args: filePath (string, required).",
+            json::object({{"filePath", prop("string", "Source file path, relative to the workspace.")}}),
+            json::array({"filePath"}));
+    }
+
+    inline json runCode()
+    {
+        return makeTool(
+            "runCode",
+            "Executes a source file inside an isolated sandbox with no network access. "
+            "The source file must be inside the workspace. The sandbox uses a temporary "
+            "working directory and enforces execution time, memory, process count and "
+            "output limits. Compiles the source before execution when necessary. "
+            "Supported extensions: .py, .c, .cpp and .rs. "
+            "The program cannot read from stdin. "
+            "ALWAYS use checkSyntax before running the program. "
+            "If compilation or execution fails, inspect the returned diagnostics, "
+            "correct the source code and try again. "
+            "Never claim execution succeeded unless the tool reports success. "
+            "Args: filePath (required), timeout (1-30 seconds, default 10), "
+            "memoryLimitMB (16-4096, default 512), "
+            "maxProcesses (1-64, default 16), "
+            "maxOutputBytes (1024-1048576, default 65536).",
+
+            json::object({{"filePath", prop(
+                                           "string",
+                                           "Source file path relative to the workspace root. "
+                                           "Absolute paths and paths outside the workspace are forbidden.")},
+                          {"timeout", prop(
+                                          "integer",
+                                          "Maximum total execution time in seconds, including compilation. "
+                                          "Minimum 1, maximum 30. Default 10.")},
+                          {"memoryLimitMB", prop(
+                                                "integer",
+                                                "Maximum memory limit in megabytes. Minimum 16, maximum 4096. "
+                                                "Default 512.")},
+                          {"maxProcesses", prop(
+                                               "integer",
+                                               "Maximum number of processes allowed inside the sandbox. "
+                                               "Minimum 1, maximum 64. Default 16.")},
+                          {"maxOutputBytes", prop(
+                                                 "integer",
+                                                 "Maximum combined stdout and stderr output in bytes. "
+                                                 "Minimum 1024, maximum 1048576. Default 65536.")}}),
+
+            json::array({"filePath"}));
+    }
+
+    inline const std::vector<ToolGroup> &groups()
+    {
+        static const std::vector<ToolGroup> g = {
+            {"filesystem_read",
+             "Explore and read files: search by name, list directories, read code.",
+             json::array({searchFiles(), listDirectory(), readCode()})},
+
+            {"filesystem_write",
+             "Create directories and save files inside the workspace.",
+             json::array({makeDir(), writeFile()})},
+
+            {"web",
+             "Search the web and fetch page HTML.",
+             json::array({getUrls(), getHTML()})},
+
+            {"utils",
+             "Arithmetic calculations.",
+             json::array({calculator()})},
+
+            {"code",
+             "Check syntax and run code files from the workspace in a sandbox.",
+             json::array({checkSyntax(), runCode()})}};
+
+        return g;
+    }
+
+    inline json listToolGroup()
+    {
+        json group = prop("string", "Name of the group to enable. Omit to only list groups.");
+        json names = json::array();
+
+        for (const auto &g : groups())
+            names.push_back(g.name);
+
+        group["enum"] = names;
+
+        return makeTool(
+            "listToolGroup",
+            "Lists the available tool groups with their descriptions. "
+            "If 'group' is provided, enables that group's tools for the next turns. "
+            "Call this first whenever you need a capability you do not currently have. "
+            "Args: group (optional).",
+            json::object({{"group", group}}));
+    }
+
+    // Catálogo completo (usado pelo parametersOf)
     inline const json &all()
     {
-        static const json schemas = json::array({calculator(),
+        static const json schemas = json::array({listToolGroup(),
+                                                 calculator(),
                                                  searchFiles(),
                                                  listDirectory(),
                                                  readCode(),
                                                  getUrls(),
                                                  getHTML(),
                                                  makeDir(),
-                                                 writeFile()});
+                                                 writeFile(),
+                                                 checkSyntax(),
+                                                 runCode()});
         return schemas;
+    }
+
+    // Único schema visível por padrão
+    inline const json &initial()
+    {
+        static const json s = json::array({listToolGroup()});
+        return s;
     }
 }
 

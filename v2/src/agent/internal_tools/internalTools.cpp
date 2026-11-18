@@ -1,6 +1,14 @@
 #include "internalTools.h"
 #include "tool_schemas.h"
 
+#include "src/agent/internal_tools/impl/sandbox/sandbox.h"
+
+#include <algorithm>
+#include <cctype>
+#include <chrono>
+#include <filesystem>
+#include <limits>
+
 namespace
 {
     constexpr const char *ARG_ERROR_PREFIX = "Invalid arguments";
@@ -20,10 +28,110 @@ namespace
     }
 }
 
-InternalTools::json InternalTools::getSchema() const
+bool InternalTools::isToolActive(std::string_view tool) const
 {
-    return ToolSchemas::all();
+    if (tool == "listToolGroup")
+        return true;
+
+    std::lock_guard lock(groupsMtx_);
+
+    if (disabledTools_.count(std::string(tool)))
+        return false;
+
+    for (const auto &g : ToolSchemas::groups())
+        if (activeGroups_.count(g.name))
+            for (const auto &t : g.tools)
+                if (t.at("function").at("name").get<std::string>() == tool)
+                    return true;
+
+    return false;
 }
+
+json InternalTools::getSchema() const
+{
+    json schema = ToolSchemas::initial();
+
+    std::unordered_set<std::string> active;
+    {
+        std::lock_guard<std::mutex> lock(groupsMtx_);
+        active = activeGroups_;
+    }
+
+    for (const auto &group : ToolSchemas::groups())
+    {
+        if (!active.contains(group.name))
+            continue;
+
+        for (const auto &tool : group.tools)
+        {
+            const std::string name = tool.at("function").at("name").get<std::string>();
+            if (isToolActive(name))
+                schema.push_back(tool);
+        }
+    }
+
+    return schema;
+}
+void InternalTools::disableGroup(const std::string &group)
+{
+    std::lock_guard lock(groupsMtx_);
+    activeGroups_.erase(group);
+}
+
+void InternalTools::setToolEnabled(const std::string &tool, bool enabled)
+{
+    std::lock_guard lock(groupsMtx_);
+    if (enabled)
+        disabledTools_.erase(tool);
+    else
+        disabledTools_.insert(tool);
+}
+
+// ToolResult InternalTools::listToolGroup(const std::string &arguments)
+// {
+//     try
+//     {
+//         const auto args = json::parse(arguments);
+
+//         if (!args.contains("group"))
+//         {
+//             std::lock_guard lock(groupsMtx_);
+//             std::string out;
+//             for (const auto &g : ToolSchemas::groups())
+//                 out += g.name + (activeGroups_.count(g.name) ? " [active]" : "") +
+//                        ": " + g.description + "\n";
+//             return {true, out};
+//         }
+
+//         const std::string group = args.at("group").get<std::string>();
+
+//         for (const auto &g : ToolSchemas::groups())
+//         {
+//             if (g.name != group)
+//                 continue;
+
+//             {
+//                 std::lock_guard lock(groupsMtx_);
+//                 activeGroups_.insert(group);
+//             }
+
+//             std::string names;
+//             for (const auto &t : g.tools)
+//             {
+//                 if (!names.empty())
+//                     names += ", ";
+//                 names += t.at("function").at("name").get<std::string>();
+//             }
+//             return {true, "Group enabled: " + group + ". Tools: " + names};
+//         }
+
+//         return {false, "", "Unknown group: " + group + ". Call listToolGroup without arguments to see the available groups."};
+//     }
+//     catch (const json::exception &e)
+//     {
+//         return {false, "", std::string("Invalid arguments: ") + e.what()};
+//     }
+// }
 
 std::future<ToolResult> InternalTools::execute(
     ToolCaller caller,
@@ -37,6 +145,10 @@ std::future<ToolResult> InternalTools::execute(
 
         if (tool.caller != caller)
             return readyResult({false, "", "Ferramenta não autorizada"});
+
+        if (caller == ToolCaller::Model && !isToolActive(name))
+            return readyResult({false, "",
+                                "Tool not enabled. Call listToolGroup to enable its group first."});
 
         return std::async(
             std::launch::async,

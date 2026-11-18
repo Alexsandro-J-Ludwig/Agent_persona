@@ -86,6 +86,9 @@ find_package(OpenSSL REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(PORTAUDIO REQUIRED IMPORTED_TARGET portaudio-2.0)
 find_package(SndFile CONFIG REQUIRED)
+find_package(SQLite3 REQUIRED)
+find_package(Boost REQUIRED COMPONENTS filesystem system)
+
 
 # Normaliza o prefixo MSYS2 (bin/../include) para não duplicar
 # o diretório implícito do compilador e quebrar include_next.
@@ -104,9 +107,11 @@ endforeach()
 # EXECUTÁVEL
 # ============================================================
 
-add_executable(agent
+file(GLOB_RECURSE TOOL_SOURCES CONFIGURE_DEPENDS
+    src/agent/internal_tools/impl/*.cpp)
+list(FILTER TOOL_SOURCES EXCLUDE REGEX "sandbox_(linux|windows)\\.cpp$")
 
-    # Entrada
+add_executable(agent
     src/main.cpp
 
     # Configurações
@@ -134,29 +139,24 @@ add_executable(agent
     src/markdown/markdownRenderer.cpp
     src/markdown/markdownFtxui.cpp
 
-    # Internal Tools
     src/agent/internal_tools/internalTools.cpp
-
-    # Tools
-    src/agent/internal_tools/impl/audioPlayer.cpp
-    src/agent/internal_tools/impl/calculator.cpp
-    src/agent/internal_tools/impl/compressor.cpp
-    src/agent/internal_tools/impl/decideThink.cpp
-    src/agent/internal_tools/impl/listDirectory.cpp
-    src/agent/internal_tools/impl/readCode.cpp
-    src/agent/internal_tools/impl/searchFiles.cpp
-    src/agent/internal_tools/impl/getURL.cpp
-    src/agent/internal_tools/impl/getHTML.cpp
-    src/agent/internal_tools/impl/stopAudio.cpp
-    src/agent/internal_tools/impl/makeDir.cpp
-    src/agent/internal_tools/impl/writeFile.cpp
-
-    # Internal Tools audio
+    ${TOOL_SOURCES}
     src/agent/internal_tools/audio/ttsService.cpp
 
-    # Task Manager
+    src/agent/memory/memory.cpp
+
     src/agent/tasks/taskManager.cpp
 )
+
+if(WIN32)
+    target_sources(agent PRIVATE
+        src/agent/internal_tools/impl/sandbox/sandbox_windows.cpp
+    )
+else()
+    target_sources(agent PRIVATE
+        src/agent/internal_tools/impl/sandbox/sandbox_linux.cpp
+    )
+endif()
 
 # ============================================================
 # HEADERS LOCAIS
@@ -207,11 +207,16 @@ target_link_libraries(
 
         PkgConfig::PORTAUDIO
         SndFile::sndfile
+        SQLite::SQLite3
+        Boost::boost
+        Boost::filesystem
+        Boost::system
 )
 
 # ============================================================
 # WINDOWS (Configurações e Bibliotecas exclusivas)
 # ============================================================
+
 
 if(WIN32)
     target_compile_definitions(
@@ -219,12 +224,35 @@ if(WIN32)
         PRIVATE
             WIN32_LEAN_AND_MEAN
             NOMINMAX
+            _WIN32_WINNT=0x0A00
     )
-    # Linka as libs do Windows apenas quando compilado nele
+
     target_link_libraries(
         agent
         PRIVATE
             ws2_32
             crypt32
+            advapi32
+            userenv
+            ole32
     )
+endif()
+
+if(UNIX AND NOT APPLE)
+    find_program(BWRAP_EXECUTABLE bwrap)
+
+    if(NOT BWRAP_EXECUTABLE)
+        message(WARNING
+            "Bubblewrap (bwrap) não encontrado. "
+            "O sandbox Linux não poderá executar código."
+        )
+    else()
+        message(STATUS "Bubblewrap encontrado: ${BWRAP_EXECUTABLE}")
+
+        target_compile_definitions(
+            agent
+            PRIVATE
+                SANDBOX_BWRAP_PATH="${BWRAP_EXECUTABLE}"
+        )
+    endif()
 endif()
