@@ -4,6 +4,8 @@
 #include <optional>
 #include <string>
 #include <thread>
+#include <algorithm>
+#include <string_view>
 
 void Chat::sendMessage(const std::string &prompt)
 {
@@ -22,74 +24,326 @@ void Chat::sendMessage(const std::string &prompt)
 
     ai_thread = std::thread([this, prompt]()
                             {
-        bool timerStarted = false;
+       bool timerStarted = false;
 
-        std::optional<MessageId> current;
-        std::optional<MessageId> thinkCurrent;
+std::optional<MessageId> current;
+std::optional<MessageId> thinkCurrent;
+std::optional<MessageId> researchCurrent;
 
-        auto finishOpenMessages = [&]()
+// Estado do parser de pesquisa.
+std::string streamBuffer;
+bool insideResearch = false;
+
+constexpr std::string_view openTag = "<RESEARCH>";
+constexpr std::string_view closeTag = "</RESEARCH>";
+
+// ============================================================
+// SAÍDA NORMAL DA IA
+// ============================================================
+
+auto appendNormalText = [&](const std::string &content)
+{
+    if (content.empty())
+        return;
+
+    if (!current)
+    {
+        if (content.find_first_not_of(" \t\r\n") == std::string::npos)
+            return;
+
+        if (thinkCurrent)
         {
-            if (current)
-            {
-                terminal.finishMessage(*current);
-                current.reset();
-            }
-            if (thinkCurrent)
-            {
-                terminal.finishMessage(*thinkCurrent);
-                thinkCurrent.reset();
-            }
-            terminal.finishToolGroup();
-        };
+            terminal.finishMessage(*thinkCurrent);
+            thinkCurrent.reset();
+        }
 
-        auto onChunk = [&](const std::string &chunk)
+        current = terminal.addMessage("IA", "", true);
+    }
+
+    terminal.appendChunk(*current, content);
+};
+
+// ============================================================
+// SAÍDA DA PESQUISA
+// ============================================================
+
+auto beginResearchBlock = [&]()
+{
+    if (current)
+    {
+        terminal.finishMessage(*current);
+        current.reset();
+    }
+
+    if (thinkCurrent)
+    {
+        terminal.finishMessage(*thinkCurrent);
+        thinkCurrent.reset();
+    }
+
+    if (researchCurrent)
+    {
+        terminal.finishResearch(*researchCurrent);
+        researchCurrent.reset();
+    }
+
+    researchCurrent = terminal.beginResearch();
+};
+
+auto appendResearchText = [&](const std::string &content)
+{
+    if (content.empty())
+        return;
+
+    if (!researchCurrent)
+        researchCurrent = terminal.beginResearch();
+
+    terminal.appendResearchChunk(*researchCurrent, content);
+};
+
+auto finishResearchBlock = [&]()
+{
+    if (researchCurrent)
+    {
+        terminal.finishResearch(*researchCurrent);
+        researchCurrent.reset();
+    }
+};
+
+// ============================================================
+// IDENTIFICA SUFIXOS QUE PODEM SER PARTE DE UMA TAG
+// ============================================================
+
+auto retainedSuffix = [](
+    const std::string &buffer,
+    std::string_view marker) -> std::size_t
+{
+    const std::size_t maximum =
+        std::min(buffer.size(), marker.size() - 1);
+
+    for (std::size_t length = maximum; length > 0; --length)
+    {
+        if (buffer.compare(
+                buffer.size() - length,
+                length,
+                marker.data(),
+                length) == 0)
         {
-            if (!current)
-            {
-                if (chunk.find_first_not_of(" \t\r\n") == std::string::npos)
-                    return;
+            return length;
+        }
+    }
 
-                if (thinkCurrent)
+    return 0;
+};
+
+// ============================================================
+// PROCESSAMENTO DOS CHUNKS
+// ============================================================
+
+auto processOutput = [&](const std::string &chunk)
+{
+    if (chunk.empty())
+        return;
+
+    streamBuffer += chunk;
+
+    while (true)
+    {
+        // ----------------------------------------------------
+        // FORA DO RELATÓRIO
+        // ----------------------------------------------------
+
+        if (!insideResearch)
+        {
+            const std::size_t position =
+                streamBuffer.find(openTag);
+
+            if (position != std::string::npos)
+            {
+                // Tudo antes da abertura pertence à conversa.
+                if (position > 0)
                 {
-                    terminal.finishMessage(*thinkCurrent);
-                    thinkCurrent.reset();
+                    appendNormalText(
+                        streamBuffer.substr(0, position));
                 }
-                current = terminal.addMessage("IA", "", true);
-            }
-            terminal.appendChunk(*current, chunk);
-        };
 
-        auto onThink = [&](const std::string &chunk)
+                // Remove a tag de abertura.
+                streamBuffer.erase(
+                    0,
+                    position + openTag.size());
+
+                beginResearchBlock();
+
+                insideResearch = true;
+                continue;
+            }
+
+            // Ainda não encontrou a tag.
+            // Preserva somente o possível início de uma tag.
+            const std::size_t keep =
+                retainedSuffix(streamBuffer, openTag);
+
+            const std::size_t emit =
+                streamBuffer.size() - keep;
+
+            if (emit > 0)
+            {
+                appendNormalText(
+                    streamBuffer.substr(0, emit));
+
+                streamBuffer.erase(0, emit);
+            }
+
+            break;
+        }
+
+        // ----------------------------------------------------
+        // DENTRO DO RELATÓRIO
+        // ----------------------------------------------------
+
+        const std::size_t position =
+            streamBuffer.find(closeTag);
+
+        if (position != std::string::npos)
         {
-            if (!thinkCurrent)
+            // Tudo antes do fechamento pertence ao relatório.
+            if (position > 0)
             {
-                if (chunk.find_first_not_of(" \t\r\n") == std::string::npos)
-                    return;
-
-                if (current)
-                {
-                    terminal.finishMessage(*current);
-                    current.reset();
-                }
-                thinkCurrent = terminal.addMessage("Thinking", "", true);
+                appendResearchText(
+                    streamBuffer.substr(0, position));
             }
-            terminal.appendChunk(*thinkCurrent, chunk);
-        };
 
-        auto onTool = [&](const std::string &name, const ToolResult &result)
+            // Remove a tag de fechamento.
+            streamBuffer.erase(
+                0,
+                position + closeTag.size());
+
+            finishResearchBlock();
+
+            insideResearch = false;
+            continue;
+        }
+
+        // Ainda não encontrou o fechamento.
+        // Preserva somente um possível início de </RESEARCH>.
+        const std::size_t keep =
+            retainedSuffix(streamBuffer, closeTag);
+
+        const std::size_t emit =
+            streamBuffer.size() - keep;
+
+        if (emit > 0)
         {
-            if (current)
-            {
-                terminal.finishMessage(*current);
-                current.reset();
-            }
-            if (thinkCurrent)
-            {
-                terminal.finishMessage(*thinkCurrent);
-                thinkCurrent.reset();
-            }
-            terminal.appendToolResult(name, result.success, result.output, result.error);
-        };
+            appendResearchText(
+                streamBuffer.substr(0, emit));
+
+            streamBuffer.erase(0, emit);
+        }
+
+        break;
+    }
+};
+
+// ============================================================
+// FINALIZA O BUFFER DE UMA RESPOSTA
+// ============================================================
+
+auto flushOutput = [&]()
+{
+    if (!streamBuffer.empty())
+    {
+        if (insideResearch)
+            appendResearchText(streamBuffer);
+        else
+            appendNormalText(streamBuffer);
+
+        streamBuffer.clear();
+    }
+
+    // Se o modelo não fechou a tag, finalizamos o relatório
+    // para não deixar a interface presa em estado de streaming.
+    if (insideResearch)
+    {
+        finishResearchBlock();
+        insideResearch = false;
+    }
+};
+
+// ============================================================
+// FINALIZA TODAS AS MENSAGENS
+// ============================================================
+
+auto finishOpenMessages = [&]()
+{
+    flushOutput();
+
+    if (current)
+    {
+        terminal.finishMessage(*current);
+        current.reset();
+    }
+
+    if (thinkCurrent)
+    {
+        terminal.finishMessage(*thinkCurrent);
+        thinkCurrent.reset();
+    }
+
+    finishResearchBlock();
+
+    terminal.finishToolGroup();
+};
+
+// ============================================================
+// CALLBACKS
+// ============================================================
+
+auto onChunk = [&](const std::string &chunk)
+{
+    processOutput(chunk);
+};
+
+auto onThink = [&](const std::string &chunk)
+{
+    if (!thinkCurrent)
+    {
+        if (chunk.find_first_not_of(" \t\r\n") == std::string::npos)
+            return;
+
+        if (current)
+        {
+            terminal.finishMessage(*current);
+            current.reset();
+        }
+
+        thinkCurrent = terminal.addMessage("Thinking", "", true);
+    }
+
+    terminal.appendChunk(*thinkCurrent, chunk);
+};
+
+auto onTool = [&](
+    const std::string &name,
+    const ToolResult &result)
+{
+    if (current)
+    {
+        terminal.finishMessage(*current);
+        current.reset();
+    }
+
+    if (thinkCurrent)
+    {
+        terminal.finishMessage(*thinkCurrent);
+        thinkCurrent.reset();
+    }
+
+    terminal.appendToolResult(
+        name,
+        result.success,
+        result.output,
+        result.error);
+};
 
         try
         {

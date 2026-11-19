@@ -1,82 +1,276 @@
+
 #include "internalTools.h"
 #include "definitions.h"
+
 #include <fstream>
+#include <algorithm>
+#include <cctype>
+#include <string>
+#include <system_error>
+
+#ifdef _WIN32
+#define NOMINMAX
+#include <Windows.h>
+#else
+#include <fcntl.h>
+#include <unistd.h>
+#include <cerrno>
+#endif
 
 ToolResult InternalTools::writeFile(const std::string &arguments)
 {
+    fs::path target;
+
     try
     {
         const auto args = json::parse(arguments);
-        const auto content = args.at("content").get<std::string>();
-        auto extension = args.at("extension").get<std::string>();
-        const auto fileName = args.at("fileName").get<std::string>();
+
+        const std::string content =
+            args.at("content").get<std::string>();
+
+        std::string extension =
+            args.at("extension").get<std::string>();
+
+        const std::string fileName =
+            args.at("fileName").get<std::string>();
+
+        // 1. Valida os argumentos.
+        if (fileName.empty())
+            return {false, "", "Nome do arquivo não pode ser vazio"};
 
         if (content.size() > 200000)
-            return {false, "", "Conteúdo muito grande"};
+            return {false, "", "Conteúdo excede 200000 bytes"};
 
-        if (!extension.empty() && extension[0] == '.')
+        if (fileName.find('\0') != std::string::npos ||
+            extension.find('\0') != std::string::npos)
+            return {false, "", "Argumentos contêm caracteres nulos"};
+
+        if (extension.empty())
+            return {false, "", "Extensão não pode ser vazia"};
+
+        if (extension.front() == '.')
             extension.erase(0, 1);
 
-        std::transform(extension.begin(), extension.end(), extension.begin(),
-                       [](unsigned char c)
-                       { return std::tolower(c); });
+        std::transform(
+            extension.begin(),
+            extension.end(),
+            extension.begin(),
+            [](unsigned char c)
+            {
+                return static_cast<char>(std::tolower(c));
+            });
 
-        // if (extension != "md")
-        //     return {false, "", "Por segurança, só é permitido criar arquivos '.md' no momento"};
+        // 2. Valida a extensão.
+        if (!Definitions::allowedExt.contains("." + extension))
+            return {false, "", "Tipo de arquivo não permitido"};
 
-        std::set<std::string> allowedExt = Definitions::allowedExt;
+        // 3. Valida o caminho relativo.
+        const fs::path relativePath(fileName + "." + extension);
 
-        if (!Definitions::allowedExt.count("." + extension))
-            return {false, "", "Unsupported file type"};
+        if (relativePath.empty() ||
+            relativePath.is_absolute() ||
+            relativePath.has_root_name() ||
+            relativePath.has_root_directory())
+            return {false, "", "Caminho absoluto não permitido"};
 
-        const fs::path workspace = fs::weakly_canonical(Definitions::ensure_workspace());
-        const fs::path target = fs::weakly_canonical(workspace / (fileName + "." + extension));
+        for (const auto &component : relativePath)
+        {
+            const std::string name = component.string();
 
-        const auto rel = target.lexically_relative(workspace);
+            if (name.empty() || name == "." || name == "..")
+                return {false, "", "Componente de caminho inválido"};
 
-        if (rel.empty() || *rel.begin() == "..")
+            if (name.back() == '.' || name.back() == ' ')
+                return {false, "", "Nome não pode terminar em ponto ou espaço"};
+
+            for (unsigned char c : name)
+            {
+                if (c < 32 ||
+                    c == '<' || c == '>' ||
+                    c == ':' || c == '"' ||
+                    c == '|' || c == '?' ||
+                    c == '*' || c == '\\')
+                    return {false, "", "Nome contém caracteres inválidos"};
+            }
+
+#ifdef _WIN32
+            std::string base = name.substr(0, name.find('.'));
+
+            std::transform(
+                base.begin(), base.end(), base.begin(),
+                [](unsigned char c)
+                {
+                    return static_cast<char>(std::toupper(c));
+                });
+
+            static const std::set<std::string> reserved = {
+                "CON", "PRN", "AUX", "NUL",
+                "COM1", "COM2", "COM3", "COM4", "COM5",
+                "COM6", "COM7", "COM8", "COM9",
+                "LPT1", "LPT2", "LPT3", "LPT4", "LPT5",
+                "LPT6", "LPT7", "LPT8", "LPT9"};
+
+            if (reserved.contains(base))
+                return {false, "", "Nome reservado pelo Windows"};
+#endif
+        }
+
+        // 4. Obtém o workspace.
+        const fs::path workspace =
+            fs::canonical(Definitions::ensure_workspace());
+
+        const fs::path unresolved = workspace / relativePath;
+
+        fs::create_directories(unresolved.parent_path());
+
+        // Canonicaliza o diretório pai para detectar links simbólicos.
+        const fs::path parent =
+            fs::canonical(unresolved.parent_path());
+
+        const auto parentRel = parent.lexically_relative(workspace);
+
+        if (parentRel.empty() ||
+            parentRel.is_absolute() ||
+            *parentRel.begin() == "..")
+            return {false, "", "Diretório fora do workspace"};
+
+        target = parent / unresolved.filename();
+
+        // 5. Criação exclusiva: nunca sobrescreve arquivos.
+#ifdef _WIN32
+
+        HANDLE handle = CreateFileW(
+            target.c_str(),
+            GENERIC_WRITE,
+            0,
+            nullptr,
+            CREATE_NEW,
+            FILE_ATTRIBUTE_NORMAL,
+            nullptr);
+
+        if (handle == INVALID_HANDLE_VALUE)
+        {
+            const DWORD error = GetLastError();
+
+            if (error == ERROR_FILE_EXISTS ||
+                error == ERROR_ALREADY_EXISTS)
+                return {false, "", "O arquivo já existe"};
+
             return {
                 false,
                 "",
-                "Caminho fora do workspace: " + fileName};
+                "Falha ao criar arquivo. Erro Windows: " +
+                    std::to_string(error)};
+        }
 
-        if (fileName.empty())
+        bool success = true;
+        size_t offset = 0;
+
+        while (offset < content.size())
+        {
+            const DWORD chunk = static_cast<DWORD>(
+                std::min<size_t>(
+                    content.size() - offset,
+                    MAXDWORD));
+
+            DWORD written = 0;
+
+            if (!WriteFile(
+                    handle,
+                    content.data() + offset,
+                    chunk,
+                    &written,
+                    nullptr) ||
+                written == 0)
+            {
+                success = false;
+                break;
+            }
+
+            offset += written;
+        }
+
+        if (success && !FlushFileBuffers(handle))
+            success = false;
+
+        if (!CloseHandle(handle))
+            success = false;
+
+        if (!success)
+        {
+            std::error_code ec;
+            fs::remove(target, ec);
+
+            return {false, "", "Falha durante a gravação do arquivo"};
+        }
+
+#else
+
+        const int fd = ::open(
+            target.c_str(),
+            O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC,
+            0600);
+
+        if (fd == -1)
+        {
+            if (errno == EEXIST)
+                return {false, "", "O arquivo já existe"};
+
             return {
                 false,
                 "",
-                "Nome do arquivo não pode ser vazio"};
+                "Falha ao criar arquivo: " +
+                    std::error_code(errno, std::generic_category()).message()};
+        }
 
-        if (fileName.find_first_of("<>:\"|?*") != std::string::npos)
-            return {false,
-                    "",
-                    "Nome do arquivo contém caracteres inválidos"};
+        bool success = true;
+        size_t offset = 0;
 
-        if (fs::exists(target))
-            return {false,
-                    "",
-                    "Já existe: " + rel.string()};
+        while (offset < content.size())
+        {
+            const ssize_t written = ::write(
+                fd,
+                content.data() + offset,
+                content.size() - offset);
 
-        fs::create_directories(target.parent_path());
+            if (written < 0)
+            {
+                if (errno == EINTR)
+                    continue;
 
-        std::ofstream file(target, std::ios::binary);
-        if (!file.is_open())
-            return {false,
-                    "",
-                    "Não foi possível abrir o arquivo para escrita"};
+                success = false;
+                break;
+            }
 
-        file.write(content.data(), static_cast<std::streamsize>(content.size()));
-        file.close();
+            if (written == 0)
+            {
+                success = false;
+                break;
+            }
 
-        if (file.fail())
-            return {
-                false,
-                "",
-                "Falha ao gravar o arquivo"};
+            offset += static_cast<size_t>(written);
+        }
+
+        if (success && ::fsync(fd) != 0)
+            success = false;
+
+        if (::close(fd) != 0)
+            success = false;
+
+        if (!success)
+        {
+            std::error_code ec;
+            fs::remove(target, ec);
+
+            return {false, "", "Falha durante a gravação do arquivo"};
+        }
+
+#endif
 
         return {
             true,
-            "Caminho do arquivo: " + target.string() +
-                "(Workspace: " + rel.string() + ")"};
+            "Arquivo criado com sucesso: " + target.string(),
+            ""};
     }
     catch (const json::exception &e)
     {
@@ -94,9 +288,6 @@ ToolResult InternalTools::writeFile(const std::string &arguments)
     }
     catch (const std::exception &e)
     {
-        return {
-            false,
-            "",
-            e.what()};
+        return {false, "", e.what()};
     }
 }

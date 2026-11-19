@@ -1,14 +1,16 @@
 #include "internalTools.h"
+#include "definitions.h"
 
-bool looksBinary(const fs::path &p)
+static bool looksBinary(const fs::path &p)
 {
     std::ifstream f(p, std::ios::binary);
     char buf[8192];
     f.read(buf, sizeof(buf));
-    return std::find(buf, buf + f.gcount(), '\0') != buf + f.gcount();
+    const auto n = static_cast<std::size_t>(f.gcount());
+    return std::find(buf, buf + n, '\0') != buf + n;
 }
 
-ToolResult InternalTools::readCode(const std::string &arguments)
+ToolResult InternalTools::readFile(const std::string &arguments)
 {
     try
     {
@@ -33,16 +35,8 @@ ToolResult InternalTools::readCode(const std::string &arguments)
             return {false, "", "File not found"};
 
         // Valida se o arquivo é um código
-        static const std::set<std::string> allowedExt = {
-            ".py", ".cpp", ".hpp", ".h", ".java", ".rs", ".c", ".cs",
-
-            // Texto e dados
-            ".txt", ".md", ".csv", ".json", ".xml", ".yaml", ".yml", ".toml", ".ini", ".log"
-
-        };
-
-        if (!allowedExt.count(filePath.extension().string()))
-            return {false, "", "Unsupported file type"};
+        if (!Definitions::allowedExt.contains(filePath.extension().string()))
+            return {false, "", "Tipo de arquivo não suportado"};
 
         if (looksBinary(filePath))
             return {false, "", "Binary file, not readable as text"};

@@ -40,14 +40,21 @@ namespace Definitions
         return path;
     }
 
-    inline static const std::set<std::string> allowedExt = {
-        // Extenções de código
-        ".py", ".cpp", ".hpp", ".h", ".java", ".rs", ".c", ".cs",
+    inline fs::path ensure_dev_workspace()
+    {
+        fs::path path = ensure_workspace() / "dev_sessions";
+        fs::create_directories(path);
+        return fs::weakly_canonical(path);
+    }
+
+    inline const std::set<std::string> allowedExt = {
+        // Código
+        ".py", ".cpp", ".hpp", ".h", ".java", ".rs", ".c", ".cs", ".html", ".css", ."ts", ".js",
+        ".hpp",
 
         // Texto e dados
-        ".txt", ".md", ".csv", ".json", ".xml", ".yaml", ".yml", ".toml", ".ini", ".log"
-
-    };
+        ".txt",
+        ".md", ".csv", ".json", ".xml", ".yaml", ".yml", ".toml", ".ini", ".log"};
 }
 
 #endif

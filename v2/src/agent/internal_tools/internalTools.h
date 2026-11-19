@@ -22,6 +22,7 @@
 #include "src/ollama/ollama.h"
 #include "src/agent/internal_tools/audio/ttsService.h"
 #include "src/configs/searxng.h"
+#include "src/agent/memory/memory.h"
 
 namespace fs = std::filesystem;
 
@@ -89,7 +90,7 @@ private:
     ToolResult calculator(const std::string &arguments);
     ToolResult searchFiles(const std::string &arguments);
     ToolResult listDirectory(const std::string &arguments);
-    ToolResult readCode(const std::string &arguments);
+    ToolResult readFile(const std::string &arguments);
     ToolResult getUrls(const std::string &arguments);
     ToolResult getHTML(const std::string &arguments);
     ToolResult makeDir(const std::string &arguments);
@@ -98,8 +99,15 @@ private:
     ToolResult checkSyntax(const std::string &arguments);
     ToolResult runCode(const std::string &arguments);
     ToolResult generate_title(const std::string &arguments);
+    ToolResult editFile(const std::string &arguments);
+    ToolResult deleteFile(const std::string &arguments);
+    ToolResult copyFile(const std::string &arguments);
+    ToolResult rememberFact(const std::string &arguments);
+    ToolResult forgetFact(const std::string &arguments);
+    ToolResult searchFacts(const std::string &arguments);
+    ToolResult listFacts(const std::string &arguments);
 
-    inline static const std::array<ToolInfo, 16> TOOLS =
+    inline static const std::array<ToolInfo, 23> TOOLS =
         {{{"decide_think", ToolCaller::System, &InternalTools::decideThink},
           {"audioPlayer", ToolCaller::System, &InternalTools::audioPlayer},
           {"stopAudio", ToolCaller::System, &InternalTools::stopAudio},
@@ -108,14 +116,21 @@ private:
           {"calculator", ToolCaller::Model, &InternalTools::calculator},
           {"searchFiles", ToolCaller::Model, &InternalTools::searchFiles},
           {"listDirectory", ToolCaller::Model, &InternalTools::listDirectory},
-          {"readCode", ToolCaller::Model, &InternalTools::readCode},
+          {"readFile", ToolCaller::Model, &InternalTools::readFile},
           {"getUrls", ToolCaller::Model, &InternalTools::getUrls},
           {"getHTML", ToolCaller::Model, &InternalTools::getHTML},
           {"makeDir", ToolCaller::Model, &InternalTools::makeDir},
           {"writeFile", ToolCaller::Model, &InternalTools::writeFile},
           {"listToolGroup", ToolCaller::Model, &InternalTools::listToolGroup},
           {"checkSyntax", ToolCaller::Model, &InternalTools::checkSyntax},
-          {"runCode", ToolCaller::Model, &InternalTools::runCode}}};
+          {"runCode", ToolCaller::Model, &InternalTools::runCode},
+          {"editFile", ToolCaller::Model, &InternalTools::editFile},
+          {"copyFile", ToolCaller::Model, &InternalTools::copyFile},
+          {"deleteFile", ToolCaller::Model, &InternalTools::deleteFile},
+          {"rememberFact", ToolCaller::Model, &InternalTools::rememberFact},
+          {"forgetFact", ToolCaller::Model, &InternalTools::forgetFact},
+          {"searchFacts", ToolCaller::Model, &InternalTools::searchFacts},
+          {"listFacts", ToolCaller::Model, &InternalTools::listFacts}}};
 };
 
 #endif

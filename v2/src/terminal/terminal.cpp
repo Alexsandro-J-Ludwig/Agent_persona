@@ -351,6 +351,45 @@ void TerminalDisplay::setStatus(const std::string &status)
     screen.PostEvent(Event::Custom);
 }
 
+MessageId TerminalDisplay::beginResearch()
+{
+    MessageId id;
+
+    {
+        std::lock_guard<std::mutex> lock(chat_mutex);
+
+        id = ++nextId;
+
+        ChatMessage entry;
+        entry.id = id;
+        entry.role = "Research";
+        entry.message = "";
+        entry.label = "Relatório da pesquisa";
+
+        messages.push_back(std::move(entry));
+        pendingUiMessages.push_back(id);
+
+        researchMessage = id;
+    }
+
+    showResearch.store(true);
+    screen.PostEvent(Event::Custom);
+
+    return id;
+}
+
+void TerminalDisplay::appendResearchChunk(
+    MessageId id,
+    const std::string &chunk)
+{
+    appendChunk(id, chunk);
+}
+
+void TerminalDisplay::finishResearch(MessageId id)
+{
+    finishMessage(id);
+}
+
 void TerminalDisplay::setAudioStatus(const bool status)
 {
     audioEnabled.store(status);
@@ -539,7 +578,49 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
                      separator()});
     };
 
-    // Constrói um componente para cada mensagem.
+    // ============================================================
+    // RENDERIZADOR DO RELATÓRIO DE PESQUISA
+    // ============================================================
+
+    auto researchRenderer = Renderer(
+        [this, renderMessage]() -> Element
+        {
+            std::optional<MessageId> id;
+
+            {
+                std::lock_guard<std::mutex> lock(chat_mutex);
+                id = researchMessage;
+            }
+
+            if (!id)
+            {
+                return vbox({text("RELATÓRIO DA PESQUISA") |
+                                 bold |
+                                 color(Color::Cyan),
+
+                             separator(),
+
+                             text("Aguardando pesquisa...")});
+            }
+
+            return vbox({hbox({text("RELATÓRIO DA PESQUISA") |
+                                   bold |
+                                   color(Color::Cyan),
+
+                               filler(),
+
+                               text("WEB") | color(Color::Green)}),
+
+                         separator(),
+
+                         renderMessage(*id, false, false)}) |
+                   borderRounded | flex;
+        });
+
+    // ============================================================
+    // COMPONENTES DAS MENSAGENS DA CONVERSA
+    // ============================================================
+
     auto createMessageComponent =
         [messageList, renderMessage, this](MessageId id)
     {
@@ -564,6 +645,10 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
             label = it->label;
         }
 
+        // O relatório possui painel próprio.
+        if (role == "Research")
+            return;
+
         const bool isThinking = role == "Thinking";
         const bool isTools = role == "Tools";
 
@@ -578,7 +663,7 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
                     Element e = renderMessage(id, isThinking, false);
 
                     if (isThinking)
-                        e = e | color(Color::RGB(170, 170, 190)) | nothing;
+                        e = e | color(Color::RGB(170, 170, 190));
 
                     return e;
                 });
@@ -720,19 +805,29 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
     // Layout e eventos globais
     // --------------------------------------------------------
 
-    int voiceSplitSize = 105;
+    int sideSplitSize = 105;
 
-    auto voiceRenderer = Renderer([this]
-                                  { return voiceView(); });
+    auto sideRenderer = Renderer(
+        [this, researchRenderer]
+        {
+            // O modo de voz tem prioridade.
+            if (audioEnabled.load())
+                return voiceView();
 
-    auto voiceLayout = ResizableSplitLeft(
+            // Quando há pesquisa, mostra o relatório.
+            if (showResearch.load())
+                return researchRenderer->Render();
+
+            return text("");
+        });
+
+    auto sideLayout = ResizableSplitLeft(
         chatScroll,
-        voiceRenderer,
-        &voiceSplitSize);
+        sideRenderer,
+        &sideSplitSize);
 
-    auto layout = Container::Vertical({voiceLayout,
+    auto layout = Container::Vertical({sideLayout,
                                        input});
-
     // Permite rolar mesmo quando o input está focado.
     auto events = CatchEvent(
         layout,
@@ -804,9 +899,10 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
     Elements elements;
 
     // ====== ALTERNÂNCIA ENTRE CONVERSA E PERSPECTIVA DE VOZ ======
-    if (audioEnabled.load())
+    // ====== MODO DE VOZ ======
+if (audioEnabled.load())
 {
-    elements.push_back(voiceLayout->Render() | flex);
+    elements.push_back(sideLayout->Render() | flex);
 
     if (showCommands)
         elements.push_back(commandView());
@@ -816,10 +912,25 @@ void TerminalDisplay::run(SubmitCallback onSubmit)
     elements.push_back(statusBar->Render());
 
     return vbox(std::move(elements))
-         | flex
-         | borderRounded
-         | color(Color::RGB(150, 210, 245))
-         | bgcolor(Color::Black);
+        | flex
+        | borderRounded
+        | color(Color::RGB(150, 210, 245))
+        | bgcolor(Color::Black);
+}
+
+// ====== MODO DE PESQUISA ======
+if (showResearch.load())
+{
+    elements.push_back(sideLayout->Render() | flex);
+
+    if (showCommands)
+        elements.push_back(commandView());
+
+    elements.push_back(input->Render());
+    elements.push_back(ts->Render());
+    elements.push_back(statusBar->Render());
+
+    return vbox(std::move(elements)) | flex;
 }
 
     // Conversa ocupa o espaço disponível.

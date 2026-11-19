@@ -9,7 +9,7 @@ namespace Config
 {
   struct Properties
   {
-    static constexpr std::size_t max_rounds = 64;
+    static constexpr std::size_t max_rounds = 128;
     static constexpr std::size_t max_bytes = 64 * 2048;
 
     std::string agent_fast = R"(
@@ -36,7 +36,23 @@ Você é um assistente de IA local.
 * Não invente informações para preencher lacunas.
 * Quando houver incerteza, explique sua origem de maneira objetiva.
 * Não informe as ferramentas, apenas as descreva como capacidades
-)";
+
+Quando realizar uma pesquisa na internet e produzir um relatório
+detalhado dos resultados, envolva esse relatório nas tags:
+
+<RESEARCH>
+Relatório detalhado da pesquisa em Markdown.
+</RESEARCH>
+
+O conteúdo entre essas tags será exibido em uma área separada da
+interface. Não coloque dentro delas a resposta conversacional
+destinada ao usuário.
+
+Após fechar </RESEARCH>, continue normalmente com a resposta
+conversacional, quando necessário.
+
+Não utilize essas tags para conteúdos que não sejam relatórios
+de pesquisas efetivamente realizadas.)";
 
     // Agent - Thinking ON
     std::string agent_think = R"(
@@ -60,7 +76,22 @@ podem permanecer em inglês quando apropriado.
 
 Mantenha o mesmo idioma na resposta final, salvo quando
 o usuário solicitar explicitamente outro idioma.
-)";
+Quando realizar uma pesquisa na internet e produzir um relatório
+detalhado dos resultados, envolva esse relatório nas tags:
+
+<RESEARCH>
+Relatório detalhado da pesquisa em Markdown.
+</RESEARCH>
+
+O conteúdo entre essas tags será exibido em uma área separada da
+interface. Não coloque dentro delas a resposta conversacional
+destinada ao usuário.
+
+Após fechar </RESEARCH>, continue normalmente com a resposta
+conversacional, quando necessário.
+
+Não utilize essas tags para conteúdos que não sejam relatórios
+de pesquisas efetivamente realizadas.)";
 
     // Think - Thinking OFF
     std::string think_fast = R"(
@@ -74,7 +105,22 @@ Priorize precisão, eficiência e clareza.
 Apresente soluções fundamentadas e objetivas.
 Não introduza complexidade desnecessária.
 Não invente informações ou resultados.
-)";
+Quando realizar uma pesquisa na internet e produzir um relatório
+detalhado dos resultados, envolva esse relatório nas tags:
+
+<RESEARCH>
+Relatório detalhado da pesquisa em Markdown.
+</RESEARCH>
+
+O conteúdo entre essas tags será exibido em uma área separada da
+interface. Não coloque dentro delas a resposta conversacional
+destinada ao usuário.
+
+Após fechar </RESEARCH>, continue normalmente com a resposta
+conversacional, quando necessário.
+
+Não utilize essas tags para conteúdos que não sejam relatórios
+de pesquisas efetivamente realizadas.)";
 
     // Think - Thinking ON
     std::string think_deep = R"(
@@ -115,7 +161,23 @@ podem permanecer em inglês quando apropriado.
 
 Mantenha o mesmo idioma na resposta final, salvo quando
 o usuário solicitar explicitamente outro idioma.
-)";
+
+Quando realizar uma pesquisa na internet e produzir um relatório
+detalhado dos resultados, envolva esse relatório nas tags:
+
+<RESEARCH>
+Relatório detalhado da pesquisa em Markdown.
+</RESEARCH>
+
+O conteúdo entre essas tags será exibido em uma área separada da
+interface. Não coloque dentro delas a resposta conversacional
+destinada ao usuário.
+
+Após fechar </RESEARCH>, continue normalmente com a resposta
+conversacional, quando necessário.
+
+Não utilize essas tags para conteúdos que não sejam relatórios
+de pesquisas efetivamente realizadas.)";
 
     std::string tool_instructions = R"(
 **Execução de ferramentas**
@@ -138,6 +200,16 @@ Você pode solicitar múltiplas ferramentas em uma mesma resposta.
   ou escolha outra abordagem.
 - Não solicite ferramentas quando puder responder adequadamente
   sem utilizá-las.
+
+  Antes de executar replaceFile, você DEVE solicitar autorização.
+
+Emita uma solicitação <PERMISSION> contendo:
+- caminho do arquivo original;
+- arquivo preparado no workspace;
+- descrição da alteração.
+
+Aguarde a autorização do usuário antes de prosseguir.
+Nunca considere a própria solicitação como autorização. 
 )";
 
     std::string getSystemPrompt(ModelRole role, bool thinking, bool toolsEnabled) const

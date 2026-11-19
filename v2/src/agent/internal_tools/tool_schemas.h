@@ -86,10 +86,10 @@ namespace ToolSchemas
                           {"limit", prop("integer", "Maximum entries per page, 1 to 100. Default 40.")}}));
     }
 
-    inline json readCode()
+    inline json readFile()
     {
         return makeTool(
-            "readCode",
+            "readFile",
             "Reads a source code file (.py, .cpp, .hpp, .h, .java, .rs, .c, .cs) and returns "
             "its lines numbered as 'N: text'. The first line of the result reports total_lines "
             "and whether the output was truncated. Use init and ends (1-based, inclusive) to read "
@@ -233,20 +233,123 @@ namespace ToolSchemas
             json::array({"filePath"}));
     }
 
+    inline json editFile()
+    {
+        return makeTool(
+            "editFile",
+            "Edits an existing file inside the workspace by replacing a specific line. "
+            "The line number is 1-based. oldContent must match the current line content "
+            "exactly, otherwise the operation must fail. newContent is the replacement. "
+            "Use this tool to make precise changes without rewriting the entire file. "
+            "Args: filePath, line, oldContent, newContent.",
+            json::object({{"filePath", prop("string",
+                                            "Relative path of the existing file inside the workspace.")},
+                          {"line", prop("integer",
+                                        "1-based line number to replace.")},
+                          {"oldContent", prop("string",
+                                              "Exact current content of the target line.")},
+                          {"newContent", prop("string",
+                                              "New content that will replace the target line.")}}),
+            json::array({"filePath", "line", "oldContent", "newContent"}));
+    }
+
+    inline json deleteFile()
+    {
+        return makeTool(
+            "deleteFile",
+            "Deletes a file or directory inside the workspace. "
+            "Directories are deleted recursively, including their contents. "
+            "The path must be relative to the workspace root. "
+            "Never use absolute paths or paths outside the workspace. "
+            "Args: path.",
+            json::object({{"path", prop("string",
+                                        "Relative path of the file or directory to delete.")}}),
+            json::array({"path"}));
+    }
+
+    inline json copyFile()
+    {
+        return makeTool(
+            "copyFile",
+            "Copies a file or directory from anywhere accessible to the process "
+            "into the agent workspace. Directories are copied recursively. "
+            "source may be an absolute or relative path accessible to the process. "
+            "destination must be relative to the workspace root. "
+            "The operation does not overwrite existing destinations by default. "
+            "Symbolic links are rejected. "
+            "Args: source, destination.",
+            json::object({{"source", prop("string",
+                                          "Source file or directory path. May be outside the workspace.")},
+                          {"destination", prop("string",
+                                               "Destination path relative to the workspace root.")}}),
+            json::array({"source", "destination"}));
+    }
+
+    inline json rememberFact()
+    {
+        return makeTool(
+            "rememberFact",
+            "Stores an important fact in persistent memory. "
+            "Use this to remember relevant information that may be useful "
+            "in future conversations. Args: fact.",
+            json::object({{"fact", prop("string", "The information to remember.")}}),
+            json::array({"fact"}));
+    }
+
+    inline json forgetFact()
+    {
+        return makeTool(
+            "forgetFact",
+            "Removes a previously stored fact from persistent memory using its ID. "
+            "Only remove facts when requested or when there is a clear reason. "
+            "Args: id.",
+            json::object({{"id", prop("integer", "ID of the fact to remove.")}}),
+            json::array({"id"}));
+    }
+
+    inline json searchFacts()
+    {
+        return makeTool(
+            "searchFacts",
+            "Searches persistent memory for facts matching a text query. "
+            "Use this when you need to recall information previously remembered. "
+            "Args: query.",
+            json::object({{"query", prop("string", "Text or keywords to search for.")}}),
+            json::array({"query"}));
+    }
+
+    inline json listFacts()
+    {
+        return makeTool(
+            "listFacts",
+            "Lists facts currently stored in persistent memory. "
+            "The limit controls the maximum number of results. Args: limit.",
+            json::object({{"limit", prop("integer", "Maximum number of facts to return (1-100).")}}),
+            json::array({"limit"}));
+    }
+
     inline const std::vector<ToolGroup> &groups()
     {
         static const std::vector<ToolGroup> g = {
             {"filesystem_read",
              "Explore and read files: search by name, list directories, read code.",
-             json::array({searchFiles(), listDirectory(), readCode()})},
+             json::array({searchFiles(), listDirectory(), readFile()})},
 
             {"filesystem_write",
-             "Create directories and save files inside the workspace.",
-             json::array({makeDir(), writeFile()})},
+             "Create, edit, copy and delete files and directories inside the workspace.",
+             json::array({makeDir(),
+                          writeFile(),
+                          editFile(),
+                          deleteFile(),
+                          copyFile()})},
 
             {"web",
              "Search the web and fetch page HTML.",
              json::array({getUrls(), getHTML()})},
+
+            {"fact",
+             "Use database to remember, forget, list and search facts",
+             json::array({rememberFact(), forgetFact(), searchFacts(), listFacts()})},
 
             {"utils",
              "Arithmetic calculations.",
@@ -285,13 +388,20 @@ namespace ToolSchemas
                                                  calculator(),
                                                  searchFiles(),
                                                  listDirectory(),
-                                                 readCode(),
+                                                 readFile(),
                                                  getUrls(),
                                                  getHTML(),
                                                  makeDir(),
                                                  writeFile(),
                                                  checkSyntax(),
-                                                 runCode()});
+                                                 runCode(),
+                                                 editFile(),
+                                                 copyFile(),
+                                                 deleteFile(),
+                                                 rememberFact(),
+                                                 forgetFact(),
+                                                 searchFacts(),
+                                                 listFacts()});
         return schemas;
     }
 

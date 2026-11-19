@@ -17,6 +17,7 @@
 #include <vector>
 #include <optional>
 #include <cstddef>
+#include <stop_token>
 
 #include "src/markdown/markdownRenderer.h"
 #include "src/markdown/markdownFtxui.h"
@@ -73,6 +74,10 @@ public:
     ftxui::Element commandView();
     ftxui::Element spinnerElement();
 
+    MessageId beginResearch();
+    void appendResearchChunk(MessageId id, const std::string &chunk);
+    void finishResearch(MessageId id);
+
 private:
     // ---- Construção da UI ----
     ftxui::Component initDisplay();
@@ -119,6 +124,9 @@ private:
 
     // ---- Renderização ----
     MarkdownRenderer render;
+
+    std::optional<MessageId> researchMessage;
+    std::atomic<bool> showResearch{false};
 };
 
 #endif

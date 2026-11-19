@@ -415,31 +415,18 @@ if rows:
     // JSON
     static ProcessResult analyzeJson(const fs::path &file)
     {
-        try
-        {
-            std::ifstream input(file);
+        std::ifstream input(file);
 
-            if (!input.is_open())
-                throw std::runtime_error("Não foi possível abrir o JSON.");
+        if (!input.is_open())
+            return {-1, "", "Não foi possível abrir o JSON.", false};
 
-            json::parse(input);
+        const json parsed = json::parse(input, nullptr, false);
 
-            return {
-                0,
-                "JSON válido.",
-                "",
-                true};
-        }
-        catch (const std::exception &e)
-        {
-            return {
-                1,
-                "",
-                e.what(),
-                true};
-        }
+        if (parsed.is_discarded())
+            return {1, "", "JSON inválido.", true};
+
+        return {0, "JSON válido.", "", true};
     }
-
 } // namespace
 
 ToolResult InternalTools::checkSyntax(
